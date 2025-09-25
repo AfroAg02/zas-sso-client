@@ -1,6 +1,6 @@
 "use server";
 
-import { ApiResponse } from "@/types/fetch/api";
+import { ApiResponse } from "../types/fetch/api";
 import { getEndpoints } from "../init-config";
 import {
   clearSessionCookies,
@@ -9,7 +9,7 @@ import {
 } from "../lib/cookies";
 import { decrypt } from "../lib/crypto";
 import { Email, Phone, SessionData, Tokens, User } from "../types";
-import { buildApiResponseAsync, handleApiServerError } from "@/lib/api";
+import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
 
 // Tipos
 

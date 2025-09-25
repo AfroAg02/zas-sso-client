@@ -1,4 +1,4 @@
-import { ApiResponse } from "@/types/fetch/api";
+import { ApiResponse } from "../types/fetch/api";
 import { SessionData, Tokens, User } from "../types";
 export declare const persistUserSessionInCookies: (session: SessionData, callbacks?: {
     onSuccess?: () => void;
@@ -15,6 +15,6 @@ export declare const authenticateWithTokens: (credentials: Tokens, callbacks?: {
 export declare const refreshTokens: (callbacks?: {
     onSuccess?: () => void;
     onError?: (error: unknown) => void;
-}) => Promise<import("@/lib/api").ApiResponse<unknown> | undefined>;
+}) => Promise<import("../lib/api").ApiResponse<unknown> | undefined>;
 export declare const getCookiesSession: () => Promise<SessionData>;
 //# sourceMappingURL=server-actions.d.ts.map

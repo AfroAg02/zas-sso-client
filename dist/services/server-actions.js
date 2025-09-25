@@ -5,7 +5,7 @@ exports.getCookiesSession = exports.refreshTokens = exports.authenticateWithToke
 const init_config_1 = require("../init-config");
 const cookies_1 = require("../lib/cookies");
 const crypto_1 = require("../lib/crypto");
-const api_1 = require("@/lib/api");
+const api_1 = require("../lib/api");
 // Tipos
 //# Almacenar sesión en cookies
 const persistUserSessionInCookies = async (session, callbacks) => {
