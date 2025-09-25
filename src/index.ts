@@ -33,7 +33,7 @@ export {
 export {
   deleteCookiesSession as serverSignOut,
   getCookiesSession,
-} from "./services/server-actions";
+} from "./services/get-session";
 
 // ---- Permisos (server) ----
 export {

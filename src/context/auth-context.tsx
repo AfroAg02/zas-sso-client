@@ -10,7 +10,7 @@ import React, {
 import {
   getCookiesSession,
   deleteCookiesSession as serverCleanSession,
-} from "../services/server-actions";
+} from "../services/get-session";
 import { SessionData } from "../types";
 
 export interface AuthContextState extends SessionData {
@@ -101,8 +101,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isLoading
         ? "loading"
         : tokens?.accessToken
-          ? "authenticated"
-          : "unauthenticated",
+        ? "authenticated"
+        : "unauthenticated",
     [isLoading, tokens?.accessToken]
   );
 
