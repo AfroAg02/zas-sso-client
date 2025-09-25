@@ -6,7 +6,6 @@ Módulo que habilita autenticación SSO basada en tokens (access / refresh) con 
 
 ## 1. Instalación
 
-Si esto estuviera publicado en npm:
 
 ```
 npm install zas-sso-client
