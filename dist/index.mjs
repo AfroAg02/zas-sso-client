@@ -1,12 +1,10 @@
-'use strict';
-
-var server = require('next/server');
-var headers = require('next/headers');
-var jose = require('jose');
-var navigation = require('next/navigation');
-var react = require('react');
-var jsxRuntime = require('react/jsx-runtime');
-var reactQuery = require('@tanstack/react-query');
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { compactDecrypt, base64url, CompactEncrypt } from 'jose';
+import { redirect } from 'next/navigation';
+import { createContext, useState, useCallback, useEffect, useMemo, useContext } from 'react';
+import { jsx, Fragment } from 'react/jsx-runtime';
+import { useQuery } from '@tanstack/react-query';
 
 // src/lib/middleware.ts
 var SALT_LENGTH = 16;
@@ -49,7 +47,7 @@ function fromHex(hex) {
 var encrypt = async (text) => {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const keyBytes = await deriveKeyRaw(getSecret(), salt);
-  const jwe = await new jose.CompactEncrypt(te.encode(text)).setProtectedHeader({ alg: ALG, enc: ENC }).encrypt(keyBytes);
+  const jwe = await new CompactEncrypt(te.encode(text)).setProtectedHeader({ alg: ALG, enc: ENC }).encrypt(keyBytes);
   return `${toHex(salt)}:${jwe}`;
 };
 var decrypt = async (encryptedText) => {
@@ -67,7 +65,7 @@ var decrypt = async (encryptedText) => {
   try {
     const salt = fromHex(saltHex);
     const keyBytes = await deriveKeyRaw(getSecret(), salt);
-    const { plaintext } = await jose.compactDecrypt(jwe, keyBytes);
+    const { plaintext } = await compactDecrypt(jwe, keyBytes);
     return td.decode(plaintext);
   } catch (e) {
     console.error("Decryption failed (jwe path):", e);
@@ -90,12 +88,12 @@ async function legacyDecrypt(encryptedText) {
 function generateStateBase64Url(bytes = 16) {
   const rnd = new Uint8Array(bytes);
   crypto.getRandomValues(rnd);
-  return jose.base64url.encode(rnd);
+  return base64url.encode(rnd);
 }
 
 // src/lib/cookies.ts
 async function setSessionCookies(data) {
-  const c = await headers.cookies();
+  const c = await cookies();
   const encryptedData = await encrypt(JSON.stringify(data));
   const name = getCookieName();
   const age = getMaxCookiesAge();
@@ -108,11 +106,11 @@ async function setSessionCookies(data) {
   });
 }
 async function readCookies() {
-  const c = await headers.cookies();
+  const c = await cookies();
   return c.get(getCookieName())?.value;
 }
 async function clearSessionCookies() {
-  const c = await headers.cookies();
+  const c = await cookies();
   c.delete(getCookieName());
 }
 
@@ -328,7 +326,7 @@ function redirectToLogin(opts = {}) {
     }
   }
   if (typeof window === "undefined") {
-    return navigation.redirect(loginUrl);
+    return redirect(loginUrl);
   }
   if (replace) {
     window.location.replace(loginUrl);
@@ -362,7 +360,7 @@ function createSSOMiddleware(options) {
   return async function middleware(req) {
     const { pathname } = req.nextUrl;
     if (!isProtected(pathname, protectedRoutes)) {
-      return server.NextResponse.next();
+      return NextResponse.next();
     }
     let hasSession = false;
     try {
@@ -373,10 +371,10 @@ function createSSOMiddleware(options) {
     } catch {
       hasSession = false;
     }
-    if (hasSession) return server.NextResponse.next();
+    if (hasSession) return NextResponse.next();
     const loginUrl = new URL(getLoginUrl());
     loginUrl.searchParams.set("callbackUrl", req.url);
-    return server.NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(loginUrl);
   };
 }
 
@@ -401,7 +399,7 @@ function parseRedirectUrl(redirectTo, baseOrigin) {
 
 // src/services/handlers.ts
 function jsonError(message, status, origin, extra) {
-  const res = server.NextResponse.json(
+  const res = NextResponse.json(
     { ok: false, error: message, ...extra },
     { status }
   );
@@ -431,7 +429,7 @@ async function GET(request) {
   safeUrl.searchParams.delete("refreshToken");
   safeUrl.searchParams.delete("state");
   const safeRedirect = safeUrl.toString();
-  const res = server.NextResponse.redirect(safeRedirect, { status: 302 });
+  const res = NextResponse.redirect(safeRedirect, { status: 302 });
   return res;
 }
 var handlers = { GET };
@@ -490,25 +488,25 @@ function initSSO(config) {
 }
 var SSO = { init: initSSO };
 var initialSession = { user: null, tokens: null };
-var AuthContext = react.createContext(void 0);
+var AuthContext = createContext(void 0);
 var AuthProvider = ({ children }) => {
-  const [user, setUser] = react.useState(initialSession.user);
-  const [tokens, setTokens] = react.useState(
+  const [user, setUser] = useState(initialSession.user);
+  const [tokens, setTokens] = useState(
     initialSession.tokens
   );
-  const [isLoading, setIsLoading] = react.useState(true);
-  const [error, setError] = react.useState(null);
-  const setSession = react.useCallback((session) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const setSession = useCallback((session) => {
     setUser(session.user);
     setTokens(session.tokens);
     setError(null);
   }, []);
-  const internalClear = react.useCallback(() => {
+  const internalClear = useCallback(() => {
     setUser(null);
     setTokens(null);
     setError(null);
   }, []);
-  const clearSession = react.useCallback(
+  const clearSession = useCallback(
     async (callbacks) => {
       setIsLoading(true);
       try {
@@ -525,7 +523,7 @@ var AuthProvider = ({ children }) => {
     },
     [internalClear]
   );
-  const reloadSession = react.useCallback(async () => {
+  const reloadSession = useCallback(async () => {
     setIsLoading(true);
     try {
       const session = await getCookiesSession();
@@ -545,10 +543,10 @@ var AuthProvider = ({ children }) => {
       setIsLoading(false);
     }
   }, [internalClear, setSession]);
-  react.useEffect(() => {
+  useEffect(() => {
     reloadSession();
   }, []);
-  const status = react.useMemo(
+  const status = useMemo(
     () => isLoading ? "loading" : tokens?.accessToken ? "authenticated" : "unauthenticated",
     [isLoading, tokens?.accessToken]
   );
@@ -562,10 +560,10 @@ var AuthProvider = ({ children }) => {
     signOut: clearSession,
     reloadSession
   };
-  return /* @__PURE__ */ jsxRuntime.jsx(AuthContext.Provider, { value, children });
+  return /* @__PURE__ */ jsx(AuthContext.Provider, { value, children });
 };
 function useAuthContext() {
-  const ctx = react.useContext(AuthContext);
+  const ctx = useContext(AuthContext);
   if (!ctx) {
     throw new Error("useAuthContext must be used within <AuthProvider>");
   }
@@ -602,8 +600,8 @@ function getJWTClaims(jwtToken) {
 }
 function Refresh({ children }) {
   const session = useAuth();
-  const [error, setError] = react.useState(null);
-  react.useEffect(() => {
+  const [error, setError] = useState(null);
+  useEffect(() => {
     setError(null);
     if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
       console.log("No accessToken or refreshToken present");
@@ -638,10 +636,10 @@ function Refresh({ children }) {
     console.error("Error refreshing session, redirecting to login");
     redirectToLogin({ preservePath: true });
   }
-  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children });
+  return /* @__PURE__ */ jsx(Fragment, { children });
 }
 function SSOProvider({ children }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(AuthProvider, { children: /* @__PURE__ */ jsxRuntime.jsx(Refresh, { children }) });
+  return /* @__PURE__ */ jsx(AuthProvider, { children: /* @__PURE__ */ jsx(Refresh, { children }) });
 }
 
 // src/permissions-control/lib.ts
@@ -690,7 +688,7 @@ async function checkPermission(code) {
 // src/permissions-control/hooks.ts
 function usePermissions(options) {
   const { enabled = true, staleTime = 6e4 } = options || {};
-  return reactQuery.useQuery({
+  return useQuery({
     queryKey: ["permissions", "me"],
     enabled,
     staleTime,
@@ -699,7 +697,7 @@ function usePermissions(options) {
 }
 function usePermissionCheck(code, options) {
   const { enabled = true, refetchInterval, staleTime = 3e4 } = options || {};
-  return reactQuery.useQuery({
+  return useQuery({
     queryKey: ["permission", "check", code],
     enabled: enabled && !!code,
     refetchInterval,
@@ -711,23 +709,6 @@ function usePermissionCheck(code, options) {
   });
 }
 
-exports.AuthProvider = AuthProvider;
-exports.Refresh = Refresh;
-exports.SSO = SSO;
-exports.SSOProvider = SSOProvider;
-exports.checkPermission = checkPermission;
-exports.fetchMyPermissions = fetchMyPermissions;
-exports.getJWTClaims = getJWTClaims;
-exports.getLoginUrl = getLoginUrl;
-exports.getRedirectUri = getRedirectUri;
-exports.getServerSession = getCookiesSession;
-exports.initSSO = initSSO;
-exports.redirectToLogin = redirectToLogin;
-exports.serverSignOut = deleteCookiesSession;
-exports.ssoHandlers = handlers;
-exports.useAuth = useAuth;
-exports.useAuthContext = useAuthContext;
-exports.usePermissionCheck = usePermissionCheck;
-exports.usePermissions = usePermissions;
-//# sourceMappingURL=index.js.map
-//# sourceMappingURL=index.js.map
+export { AuthProvider, Refresh, SSO, SSOProvider, checkPermission, fetchMyPermissions, getJWTClaims, getLoginUrl, getRedirectUri, getCookiesSession as getServerSession, initSSO, redirectToLogin, deleteCookiesSession as serverSignOut, handlers as ssoHandlers, useAuth, useAuthContext, usePermissionCheck, usePermissions };
+//# sourceMappingURL=index.mjs.map
+//# sourceMappingURL=index.mjs.map
