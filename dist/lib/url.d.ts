@@ -17,5 +17,5 @@ export type RedirectToLoginOptions = {
  * En server usa next/navigation.redirect (lanza excepción controlada para cortar render).
  * En cliente usa window.location.assign o replace según la opción.
  */
-export declare function redirectToLogin(opts?: RedirectToLoginOptions): any;
+export declare function redirectToLogin(opts?: RedirectToLoginOptions): undefined;
 //# sourceMappingURL=url.d.ts.map

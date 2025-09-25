@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SSOInitOptions } from "../types";
 /** Determina si un pathname está dentro de alguno de los prefijos protegidos. */
 declare function isProtected(pathname: string, protectedRoutes: string[] | null): boolean;
@@ -14,7 +14,7 @@ export declare function buildMiddlewareConfig(protectedRoutes?: string[]): {
  *  - Si requiere auth y NO hay sesión => redirige a login con callbackUrl.
  *  - Si requiere auth y hay sesión => continúa.
  */
-export declare function createSSOMiddleware(options?: SSOInitOptions): (req: NextRequest) => Promise<any>;
+export declare function createSSOMiddleware(options?: SSOInitOptions): (req: NextRequest) => Promise<NextResponse<unknown>>;
 export declare const _internal: {
     isProtected: typeof isProtected;
     buildMiddlewareConfig: typeof buildMiddlewareConfig;

@@ -20,7 +20,7 @@ export declare function getEndpoints(): {
     me: string;
 };
 export declare function initSSO(config: SSOInitOptions): {
-    readonly middleware: (req: NextRequest) => Promise<any>;
+    readonly middleware: (req: import("next/server").NextRequest) => Promise<import("next/server").NextResponse<unknown>>;
     readonly config: {
         readonly matcher: string[];
     } | {
