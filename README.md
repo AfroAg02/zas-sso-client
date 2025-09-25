@@ -156,12 +156,17 @@ function PermissionsPanel() {
 En server:
 
 ```ts
-import { fetchMyPermissions, checkPermission } from "zas-sso-client";
+import {
+  fetchMyPermissions,
+  checkPermission,
+  getCookiesSession,
+} from "zas-sso-client";
 
 export async function GET() {
+  const session = await getCookiesSession();
   const perms = await fetchMyPermissions();
   const can = await checkPermission("REPORTS_READ");
-  return Response.json({ perms, can });
+  return Response.json({ session, perms, can });
 }
 ```
 
@@ -230,7 +235,7 @@ initSSO, SSO, getRedirectUri,
 SSOProvider, AuthProvider, useAuthContext, useAuth, Refresh,
 redirectToLogin, getLoginUrl, getJWTClaims,
 fetchMyPermissions, checkPermission, usePermissions, usePermissionCheck,
-serverSignOut, ssoHandlers,
+serverSignOut, getCookiesSession, ssoHandlers,
 Tipos: Tokens, SessionData, User, SSOInitOptions, etc.
 ```
 

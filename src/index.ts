@@ -30,7 +30,10 @@ export {
 
 // ---- Server actions públicas ----
 // Exponemos únicamente sign out para limpiar la sesión. El resto queda interno.
-export { deleteCookiesSession as serverSignOut } from "./services/server-actions";
+export {
+  deleteCookiesSession as serverSignOut,
+  getCookiesSession,
+} from "./services/server-actions";
 
 // ---- Permisos (server) ----
 export {
