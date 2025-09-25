@@ -3,7 +3,7 @@ import { handlers as ssoHandlers } from "./services/handlers";
 import { SSOInitOptions } from "./types";
 
 export let NEXT_PUBLIC_APP_URL: string | undefined = process.env.NEXT_PUBLIC_APP_URL; // Cambia esto por la URL real de tu app
-export let NEXT_PUBLIC_SSO_URL: string = "http://localhost:3001/login"; // Cambia esto por la URL real del SSO
+export let NEXT_PUBLIC_SSO_URL: string = "https://login.zasdistributor.com/login"; // Cambia esto por la URL real del SSO
 export let REDIRECT_URI: string = "/"; // Cambia esto por la URL real de tu app
 
 // Auth/session config movido desde lib/config.ts
