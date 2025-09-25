@@ -13,7 +13,7 @@ export { default as SSOProvider } from "./providers/sso-provider";
 export { default as Refresh } from "./hooks/refresh";
 export { useAuth } from "./hooks/use-auth";
 export { usePermissionCheck, usePermissions, } from "./permissions-control/hooks";
-export { deleteCookiesSession as serverSignOut } from "./services/server-actions";
+export { deleteCookiesSession as serverSignOut, getCookiesSession as getServerSession, } from "./services/server-actions";
 export { checkPermission, fetchMyPermissions, } from "./permissions-control/server";
 export { getJWTClaims } from "./lib/decode";
 export { getLoginUrl, redirectToLogin } from "./lib/url";

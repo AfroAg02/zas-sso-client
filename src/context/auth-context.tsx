@@ -10,7 +10,7 @@ import React, {
 import {
   getCookiesSession,
   deleteCookiesSession as serverCleanSession,
-} from "../services/get-session";
+} from "../services/server-actions";
 import { SessionData } from "../types";
 
 export interface AuthContextState extends SessionData {

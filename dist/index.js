@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ssoHandlers = exports.redirectToLogin = exports.getLoginUrl = exports.getJWTClaims = exports.fetchMyPermissions = exports.checkPermission = exports.serverSignOut = exports.usePermissions = exports.usePermissionCheck = exports.useAuth = exports.Refresh = exports.SSOProvider = exports.useAuthContext = exports.AuthProvider = exports.SSO = exports.initSSO = exports.getRedirectUri = void 0;
+exports.ssoHandlers = exports.redirectToLogin = exports.getLoginUrl = exports.getJWTClaims = exports.fetchMyPermissions = exports.checkPermission = exports.getServerSession = exports.serverSignOut = exports.usePermissions = exports.usePermissionCheck = exports.useAuth = exports.Refresh = exports.SSOProvider = exports.useAuthContext = exports.AuthProvider = exports.SSO = exports.initSSO = exports.getRedirectUri = void 0;
 // ---- Inicialización / Config (solo API pública necesaria) ----
 // Mantén la superficie mínima necesaria para consumir el paquete.
 var init_config_1 = require("./init-config");
@@ -37,6 +37,7 @@ Object.defineProperty(exports, "usePermissions", { enumerable: true, get: functi
 // Exponemos únicamente sign out para limpiar la sesión. El resto queda interno.
 var server_actions_1 = require("./services/server-actions");
 Object.defineProperty(exports, "serverSignOut", { enumerable: true, get: function () { return server_actions_1.deleteCookiesSession; } });
+Object.defineProperty(exports, "getServerSession", { enumerable: true, get: function () { return server_actions_1.getCookiesSession; } });
 // ---- Permisos (server) ----
 var server_1 = require("./permissions-control/server");
 Object.defineProperty(exports, "checkPermission", { enumerable: true, get: function () { return server_1.checkPermission; } });
