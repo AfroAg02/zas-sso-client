@@ -1,5 +1,5 @@
 {
-  "name": "@afroag02/zas-sso-client",
+  "name": "zas-sso-client",
   "version": "1.0.4",
   "description": "Paquete SSO para Next.js con autenticación basada en tokens, manejo de sesión en cookies cifradas, refresco automático y control de permisos.",
   "main": "dist/index.js",
