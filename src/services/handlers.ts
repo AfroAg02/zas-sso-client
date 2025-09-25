@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRedirectUri } from "../init-config";
+import { getRedirectUri, NEXT_PUBLIC_APP_URL } from "../init-config";
 import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
 
@@ -45,7 +45,9 @@ export async function GET(request: Request) {
   const redirectUri = getRedirectUri();
   console.log("Authentication successful:", redirectUri);
   // Redirección segura (sanitize)
-  const safeUrl = new URL(parseRedirectUrl(redirectUri, url.origin));
+  const safeUrl = new URL(
+    parseRedirectUrl(redirectUri, NEXT_PUBLIC_APP_URL || url.origin)
+  );
   safeUrl.searchParams.delete("accessToken");
   safeUrl.searchParams.delete("refreshToken");
   safeUrl.searchParams.delete("state");
