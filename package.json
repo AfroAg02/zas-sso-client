@@ -2,15 +2,16 @@
   "name": "zas-sso-client",
   "version": "1.1.1",
   "description": "Paquete SSO para Next.js con autenticación basada en tokens, manejo de sesión en cookies cifradas, refresco automático y control de permisos.",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
@@ -45,18 +46,18 @@
     "@types/react": "^18.2.0",
     "@types/node": "^20.0.0",
     "next": "15.3.2",
-    "react": "^18.0.0",
-    "tsup": "^8.0.1"
+    "react": "^18.0.0"
   },
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./edge": {
-      "import": "./dist/edge.mjs",
-      "require": "./dist/edge.js"
-    }
+      "types": "./dist/edge.d.ts",
+      "import": "./dist/edge.js"
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false
 }
