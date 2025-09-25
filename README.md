@@ -9,9 +9,9 @@ Módulo que habilita autenticación SSO basada en tokens (access / refresh) con 
 Si esto estuviera publicado en npm:
 
 ```
-npm install @afroag02/zas-sso-client
+npm install zas-sso-client
 # o
-pnpm add @afroag02/zas-sso-client
+pnpm add zas-sso-client
 ```
 
 Variables de entorno mínimas (ejemplo `.env.local`):
@@ -30,7 +30,7 @@ El resto (endpoints SSO / API) puedes suministrarlos vía `initSSO`.
 En `middleware.ts` (raíz del proyecto Next.js 13+ app router):
 
 ```ts
-import { initSSO } from "@afroag02/zas-sso-client";
+import { initSSO } from "zas-sso-client";
 
 // Rutas que requieren sesión. Si omites protectedRoutes => TODAS requieren auth.
 const { middleware, config } = initSSO({
@@ -61,7 +61,7 @@ export const config = config; // si Next exige exactamente 'config'
 En `src/app/layout.tsx` (o el layout raíz que envuelve tus páginas protegidas):
 
 ```tsx
-import { SSOProvider, Refresh } from "@afroag02/zas-sso-client";
+import { SSOProvider, Refresh } from "zas-sso-client";
 
 export default function RootLayout({
   children,
@@ -90,7 +90,7 @@ Tu SSO externo redirige a: `https://TU_APP/api/sso/callback?accessToken=...&refr
 En tu `app/api/sso/callback/route.ts` puedes simplemente re-exportar los handlers:
 
 ```ts
-export { ssoHandlers as GET } from "@afroag02/zas-sso-client";
+export { ssoHandlers as GET } from "zas-sso-client";
 ```
 
 (Ajusta según convención de tu versión Next).
@@ -100,11 +100,7 @@ export { ssoHandlers as GET } from "@afroag02/zas-sso-client";
 ## 5. Uso en componentes
 
 ```tsx
-import {
-  useAuth,
-  redirectToLogin,
-  serverSignOut,
-} from "@afroag02/zas-sso-client";
+import { useAuth, redirectToLogin, serverSignOut } from "zas-sso-client";
 
 export function UserWidget() {
   const { user, status, signOut, isLoading } = useAuth();
@@ -128,7 +124,7 @@ export function UserWidget() {
 Para cerrar sesión desde server (ej. en una Server Action):
 
 ```ts
-import { serverSignOut } from "@afroag02/zas-sso-client";
+import { serverSignOut } from "zas-sso-client";
 
 export async function action() {
   await serverSignOut();
@@ -142,7 +138,7 @@ export async function action() {
 Hooks (cliente) basados en React Query:
 
 ```tsx
-import { usePermissions, usePermissionCheck } from "@afroag02/zas-sso-client";
+import { usePermissions, usePermissionCheck } from "zas-sso-client";
 
 function PermissionsPanel() {
   const { data: perms, isLoading } = usePermissions();
@@ -160,7 +156,7 @@ function PermissionsPanel() {
 En server:
 
 ```ts
-import { fetchMyPermissions, checkPermission } from "@afroag02/zas-sso-client";
+import { fetchMyPermissions, checkPermission } from "zas-sso-client";
 
 export async function GET() {
   const perms = await fetchMyPermissions();
@@ -212,7 +208,7 @@ Componentes clave:
 
 ## 8. Buenas Prácticas
 
-1. Minimiza superficie pública: importa solo desde el barrel `@afroag02/zas-sso-client`.
+1. Minimiza superficie pública: importa solo desde el barrel `zas-sso-client`.
 2. No expongas `encrypt/decrypt` ni manipules cookies manualmente; usa las funciones provistas.
 3. Asegura `ENCRYPTION_SECRET` fuerte (32+ chars) y rota si sospechas compromiso.
 4. Usa `preservePath` al redirigir para mejorar UX post-login.
