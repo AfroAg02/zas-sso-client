@@ -5,14 +5,13 @@ import { useAuth } from "./use-auth";
 import { redirectToLogin } from "../lib/url";
 import { getJWTClaims } from "../lib/decode";
 
-
 export default function Refresh({ children }: { children: React.ReactNode }) {
   const session = useAuth();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setError(null); // reset error on session change
     if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
-      console.log("No accessToken or refreshToken present");
+      console.error("No accessToken or refreshToken present");
       return;
     }
 
@@ -20,7 +19,7 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
     const tokenClaims = getJWTClaims(accessToken);
 
     if (!tokenClaims?.exp) {
-      console.log("No exp in token claims");
+      console.error("No exp in token claims");
       return;
     }
 
@@ -29,18 +28,11 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
     const expiresIn = tokenClaims.exp - now;
     const refreshInMs = Math.max((expiresIn - refreshThreshold) * 1000, 0);
 
-    console.log(`Scheduling token refresh in ${refreshInMs / 1000}s`);
-
     const timeoutId = setTimeout(async () => {
-      console.log(
-        "AccessToken expired (or near expiration), attempting refresh"
-      );
       const response = await refreshTokens();
       if (response?.message) {
         setError(response.message);
         console.error("Error refreshing tokens:", response);
-      } else {
-        console.log("Tokens refreshed successfully:", response);
       }
     }, refreshInMs);
 

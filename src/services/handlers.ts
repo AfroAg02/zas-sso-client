@@ -21,7 +21,6 @@ function jsonError(
 export async function GET(request: Request) {
   const origin = request.headers.get("origin");
   const url = new URL(request.url);
-  console.log("[  ]SSO Callback URL:", url.toString());
   // Parámetros esperados
   const accessToken = url.searchParams.get("accessToken");
   const refreshToken = url.searchParams.get("refreshToken");
@@ -43,7 +42,6 @@ export async function GET(request: Request) {
     );
   }
   const redirectUri = getRedirectUri();
-  console.log("Authentication successful:", redirectUri);
   // Redirección segura (sanitize)
   const safeUrl = new URL(
     parseRedirectUrl(redirectUri, NEXT_PUBLIC_APP_URL || url.origin)
