@@ -1,0 +1,1 @@
+{"version":3,"file":"lib.js","sourceRoot":"","sources":["../../src/permissions-control/lib.ts"],"names":[],"mappings":"AAAA,MAAM,CAAC,MAAM,SAAS,GAAG;IACvB,WAAW,EAAE,mDAAmD;IAChE,KAAK,EAAE,CAAC,IAAY,EAAE,EAAE,CAAC,qDAAqD,kBAAkB,CAAC,IAAI,CAAC,QAAQ;CAC/G,CAAC"}
