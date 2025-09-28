@@ -11,7 +11,7 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setError(null); // reset error on session change
     if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
-      console.error("No accessToken or refreshToken present");
+      redirectToLogin({ preservePath: true });
       return;
     }
 
