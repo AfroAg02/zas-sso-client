@@ -8,7 +8,7 @@ Módulo que habilita autenticación SSO basada en tokens (access / refresh) con 
 
 
 ```
-npm install zas-sso-client
+npm install zas-sso-client --legacy-peer-deps
 # o
 pnpm add zas-sso-client
 ```

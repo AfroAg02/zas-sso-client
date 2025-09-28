@@ -4,6 +4,7 @@ import { refreshTokens } from "../services/server-actions";
 import { useAuth } from "./use-auth";
 import { redirectToLogin } from "../lib/url";
 import { getJWTClaims } from "../lib/decode";
+import { getAutomaticRedirectOnRefresh } from "@/init-config";
 
 export default function Refresh({ children }: { children: React.ReactNode }) {
   const session = useAuth();
@@ -11,7 +12,11 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setError(null); // reset error on session change
     if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
-      redirectToLogin({ preservePath: true });
+      if (getAutomaticRedirectOnRefresh()) {
+        redirectToLogin({ preservePath: true });
+      } else {
+        console.warn("No tokens available, not redirecting due to config");
+      }
       return;
     }
 
