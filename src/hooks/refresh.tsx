@@ -12,11 +12,7 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setError(null); // reset error on session change
     if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
-      if (getAutomaticRedirectOnRefresh()) {
-        redirectToLogin({ preservePath: true });
-      } else {
-        console.warn("No tokens available, not redirecting due to config");
-      }
+      console.warn("No tokens available, not redirecting due to config");
       return;
     }
 
