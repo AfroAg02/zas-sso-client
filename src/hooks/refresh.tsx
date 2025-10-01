@@ -4,7 +4,6 @@ import { refreshTokens } from "../services/server-actions";
 import { useAuth } from "./use-auth";
 import { redirectToLogin } from "../lib/url";
 import { getJWTClaims } from "../lib/decode";
-import { getAutomaticRedirectOnRefresh } from "../init-config";
 
 export default function Refresh({ children }: { children: React.ReactNode }) {
   const session = useAuth();
