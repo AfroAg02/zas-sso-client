@@ -36,6 +36,7 @@ export interface SSOInitOptions {
     ssoUrl?: string;
     redirectUri?: string;
     cookieMaxAgeSeconds?: number;
+    automaticRedirectOnRefresh?: boolean;
     endpoints?: Partial<{
         login: string;
         refresh: string;

@@ -48,7 +48,6 @@ export const authenticateWithTokens = async (credentials, callbacks) => {
             tokens: credentials,
         });
         callbacks?.onSuccess?.();
-        console.log("User authenticated successfully:", userResponse);
         return {
             data: userResponse.data,
             status: userResponse.status,

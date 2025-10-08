@@ -9,6 +9,14 @@ export interface Permission {
     roleName: string;
     roleCode: string;
 }
+export interface PaginatedPermissions {
+    data: Permission[];
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+}
 export declare function fetchMyPermissions(): Promise<Permission[]>;
 export declare function checkPermission(code: string): Promise<boolean>;
 //# sourceMappingURL=server.d.ts.map

@@ -11,29 +11,24 @@ export default function Refresh({ children }) {
     useEffect(() => {
         setError(null); // reset error on session change
         if (!session?.tokens?.accessToken || !session?.tokens?.refreshToken) {
-            console.log("No accessToken or refreshToken present");
+            console.warn("No tokens available, not redirecting due to config");
             return;
         }
         const { accessToken } = session.tokens;
         const tokenClaims = getJWTClaims(accessToken);
         if (!tokenClaims?.exp) {
-            console.log("No exp in token claims");
+            console.error("No exp in token claims");
             return;
         }
         const now = Math.floor(Date.now() / 1000);
         const refreshThreshold = 30; // segundos antes de que expire
         const expiresIn = tokenClaims.exp - now;
         const refreshInMs = Math.max((expiresIn - refreshThreshold) * 1000, 0);
-        console.log(`Scheduling token refresh in ${refreshInMs / 1000}s`);
         const timeoutId = setTimeout(async () => {
-            console.log("AccessToken expired (or near expiration), attempting refresh");
             const response = await refreshTokens();
             if (response?.message) {
                 setError(response.message);
                 console.error("Error refreshing tokens:", response);
-            }
-            else {
-                console.log("Tokens refreshed successfully:", response);
             }
         }, refreshInMs);
         return () => clearTimeout(timeoutId); // limpiar cuando cambie el session

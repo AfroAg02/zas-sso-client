@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRedirectUri } from "../init-config";
+import { getRedirectUri, getAppUrl } from "../init-config";
 import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
 // Orígenes permitidos (puedes ampliar)
@@ -10,7 +10,6 @@ function jsonError(message, status, origin, extra) {
 export async function GET(request) {
     const origin = request.headers.get("origin");
     const url = new URL(request.url);
-    console.log("[  ]SSO Callback URL:", url.toString());
     // Parámetros esperados
     const accessToken = url.searchParams.get("accessToken");
     const refreshToken = url.searchParams.get("refreshToken");
@@ -24,9 +23,8 @@ export async function GET(request) {
         return jsonError("Invalid credentials or user fetch failed", result.status || 401, origin);
     }
     const redirectUri = getRedirectUri();
-    console.log("Authentication successful:", redirectUri);
     // Redirección segura (sanitize)
-    const safeUrl = new URL(parseRedirectUrl(redirectUri, url.origin));
+    const safeUrl = new URL(parseRedirectUrl(redirectUri, getAppUrl() || url.origin));
     safeUrl.searchParams.delete("accessToken");
     safeUrl.searchParams.delete("refreshToken");
     safeUrl.searchParams.delete("state");
