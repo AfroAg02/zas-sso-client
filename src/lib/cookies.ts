@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { SessionData } from "../types";
 import { encrypt } from "./crypto";
-import { getConfig } from "@/init-config";
+import { getConfig } from "../init-config";
 
 export async function setSessionCookies(data: SessionData) {
   const c = await cookies();
