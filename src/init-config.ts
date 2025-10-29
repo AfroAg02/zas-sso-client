@@ -34,6 +34,7 @@ export function getRedirectUri() {
 }
 
 export function getregisterCallbackUri() {
+  console.log("Register Callback URI: on GET CONFIG", config.REGISTER_REDIRECT_URI);
   return config.REGISTER_REDIRECT_URI;
 }
 export function getEndpoints() {
