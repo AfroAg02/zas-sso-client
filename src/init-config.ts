@@ -8,7 +8,7 @@ const config = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_SSO_URL: "https://login.zasdistributor.com/login",
   REDIRECT_URI: "/",
-  REGISTER_REDIRECT_URI: "/",
+  REGISTER_REDIRECT_URI: process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/",
   MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
   COOKIE_SESSION_NAME: "session",
   ENDPOINTS: {
@@ -43,6 +43,7 @@ export function getEndpoints() {
 
 // Inicializador para sobrescribir valores
 export function initSSO(options: SSOInitOptions) {
+  console.log("Initializing SSO with options:", options);
   if (options.appUrl) config.NEXT_PUBLIC_APP_URL = options.appUrl;
   if (options.ssoUrl) config.NEXT_PUBLIC_SSO_URL = options.ssoUrl;
   if (options.redirectUri) config.REDIRECT_URI = options.redirectUri;
