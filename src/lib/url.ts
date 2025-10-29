@@ -1,5 +1,5 @@
 import { redirect as nextRedirect } from "next/navigation";
-import { getAppUrl, getSsoUrl } from "../init-config";
+import { getAppUrl, getregisterCallbackUri, getSsoUrl } from "../init-config";
 import { generateStateBase64Url } from "./crypto";
 
 /**
@@ -10,6 +10,13 @@ export const getLoginUrl = () => {
   const url = new URL(`${getSsoUrl()}`);
   url.searchParams.set("state", state);
   const redirectUri = `${getAppUrl()}/api/sso/callback`;
+  const registerCallbackUri = getregisterCallbackUri();
+  if (registerCallbackUri && registerCallbackUri !== "/") {
+    url.searchParams.set(
+      "register_callback_uri",
+      `${getAppUrl()}${registerCallbackUri}`
+    );
+  }
   url.searchParams.set("redirect_uri", redirectUri);
   return url.toString();
 };

@@ -42,6 +42,7 @@ export interface SSOInitOptions {
   appUrl?: string;
   ssoUrl?: string;
   redirectUri?: string;
+  registerCallbackUri?: string;
   cookieMaxAgeSeconds?: number;
   automaticRedirectOnRefresh?: boolean;
   endpoints?: Partial<{

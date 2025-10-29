@@ -10,7 +10,12 @@
 
 // ---- Inicialización / Config (solo API pública necesaria) ----
 // Mantén la superficie mínima necesaria para consumir el paquete.
-export { getRedirectUri, initSSO, SSO } from "./init-config";
+export {
+  getRedirectUri,
+  initSSO,
+  getregisterCallbackUri,
+  SSO,
+} from "./init-config";
 
 // ---- Proveedor principal y contexto ----
 export {

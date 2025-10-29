@@ -8,6 +8,7 @@ const config = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_SSO_URL: "https://login.zasdistributor.com/login",
   REDIRECT_URI: "/",
+  REGISTER_REDIRECT_URI: "/",
   MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
   COOKIE_SESSION_NAME: "session",
   ENDPOINTS: {
@@ -31,6 +32,10 @@ export function getSsoUrl() {
 export function getRedirectUri() {
   return config.REDIRECT_URI;
 }
+
+export function getregisterCallbackUri() {
+  return config.REGISTER_REDIRECT_URI;
+}
 export function getEndpoints() {
   return config.ENDPOINTS;
 }
@@ -40,6 +45,8 @@ export function initSSO(options: SSOInitOptions) {
   if (options.appUrl) config.NEXT_PUBLIC_APP_URL = options.appUrl;
   if (options.ssoUrl) config.NEXT_PUBLIC_SSO_URL = options.ssoUrl;
   if (options.redirectUri) config.REDIRECT_URI = options.redirectUri;
+  if (options.registerCallbackUri)
+    config.REGISTER_REDIRECT_URI = options.registerCallbackUri;
   if (options.cookieName) config.COOKIE_SESSION_NAME = options.cookieName;
   if (typeof options.cookieMaxAgeSeconds === "number") {
     config.MAX_COOKIES_AGE = options.cookieMaxAgeSeconds;
