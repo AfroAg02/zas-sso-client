@@ -50,6 +50,7 @@ export async function GET(request: Request) {
   safeUrl.searchParams.delete("refreshToken");
   safeUrl.searchParams.delete("state");
   const safeRedirect = safeUrl.toString();
+  console.log("[callback] redirecting to", safeRedirect);
   const res = NextResponse.redirect(safeRedirect, { status: 302 });
   return res;
 }
