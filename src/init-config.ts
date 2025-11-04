@@ -6,7 +6,7 @@ import { SSOInitOptions } from "./types";
 // Objeto de configuración centralizado (mutable)
 const config = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  NEXT_PUBLIC_SSO_URL: "https://login.zasdistributor.com/login",
+  NEXT_PUBLIC_SSO_URL: process.env.NEXT_PUBLIC_SSO_URL ?? "https://login.zasdistributor.com/login",
   REDIRECT_URI: "/",
   REGISTER_REDIRECT_URI: process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/",
   MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
