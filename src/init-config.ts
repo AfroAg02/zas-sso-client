@@ -3,8 +3,7 @@ import { buildMiddlewareConfig, createSSOMiddleware } from "./lib/middleware";
 import { handlers as ssoHandlers } from "./services/handlers";
 import { SSOInitOptions } from "./types";
 
-// Objeto de configuración centralizado (mutable)
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com";
+
 
 const config = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
@@ -14,9 +13,9 @@ const config = {
   MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
   COOKIE_SESSION_NAME: "session",
   ENDPOINTS: {
-    login: `${API_URL}/auth/login`,
-    refresh: `${API_URL}/auth/refresh`,
-    me: `${API_URL}/users/me`,
+    login: `${process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com"}/auth/login`,
+    refresh: `${process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com"}/auth/refresh`,
+    me: `${process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com"}/users/me`,
   },
   AUTOMATIC_REDIRECT_ON_REFRESH: true,
 };
