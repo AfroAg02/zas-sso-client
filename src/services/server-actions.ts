@@ -27,6 +27,7 @@ export const persistUserSessionInCookies = async (
         emails: session.user?.emails as Email[],
         phones: session.user?.phones as Phone[],
         photoUrl: session.user?.photoUrl as string,
+        sessionId: session.user?.sessionId ?? "",
       },
     };
 
@@ -148,4 +149,3 @@ export const getCookiesSession = async () => {
     return { user: null, tokens: null, shouldClear: true };
   }
 };
-

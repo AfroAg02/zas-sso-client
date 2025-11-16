@@ -21,6 +21,7 @@ export interface User {
   emails: Email[];
   phones: Phone[];
   photoUrl: string;
+  sessionId?: string;
 }
 
 export type SessionData = {
