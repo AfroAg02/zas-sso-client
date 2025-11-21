@@ -14,6 +14,8 @@ const apiBase = normalizeUrl(
   process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com"
 );
 
+const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
+
 const config = {
   NEXT_PUBLIC_APP_URL: normalizeUrl(process.env.NEXT_PUBLIC_APP_URL),
   NEXT_PUBLIC_SSO_URL: normalizeUrl(
@@ -27,7 +29,10 @@ const config = {
   COOKIE_SESSION_NAME: "session",
   ENDPOINTS: {
     login: `${apiBase}/auth/login`,
-    refresh: `${apiBase}/auth/refresh`,
+    refresh:
+      refreshEndpointEnv && refreshEndpointEnv.length > 0
+        ? refreshEndpointEnv
+        : `${apiBase}/auth/refresh`,
     me: `${apiBase}/users/me`,
   },
   AUTOMATIC_REDIRECT_ON_REFRESH: true,
