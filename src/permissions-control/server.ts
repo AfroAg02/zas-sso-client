@@ -39,7 +39,7 @@ export async function fetchMyPermissions(): Promise<Permission[]> {
   const all: Permission[] = [];
   let page = 1;
   const pageSize = 10000;
-
+  console.log("Fetching permissions from server...", ENDPOINTS.permissions);
   while (true) {
     const url = `${ENDPOINTS.permissions}?page=${page}&pageSize=${pageSize}`;
     const res = await fetch(url, {
