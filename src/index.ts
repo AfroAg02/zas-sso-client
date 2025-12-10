@@ -56,6 +56,9 @@ export type * from "./types";
 // ---- Handlers (ej: callback SSO) ----
 export { handlers as ssoHandlers } from "./services/handlers";
 
+export { createSSOMiddleware, buildMiddlewareConfig } from "./lib/middleware";
+
+
 // parseRedirectUrl, cookies y crypto permanecen internos (no exportados) para reducir superficie pública.
 
 // ---- Nota ----
