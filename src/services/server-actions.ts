@@ -138,7 +138,11 @@ export const getCookiesSession = async () => {
     if (!sessionData || !sessionData.tokens) {
       return { user: null, tokens: null, shouldClear: true };
     }
-    return { user: userData.data, tokens: sessionData.tokens, shouldClear: false };
+    return {
+      user: userData.data ?? null,
+      tokens: sessionData.tokens,
+      shouldClear: false,
+    };
   } catch {
     return { user: null, tokens: null, shouldClear: true };
   }
