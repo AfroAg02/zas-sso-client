@@ -15,7 +15,7 @@ export interface Phone {
 }
 
 // User types
-export interface User {
+export interface BaseUser {
   id: number;
   name: string;
   emails: Email[];
@@ -23,6 +23,11 @@ export interface User {
   photoUrl: string;
   sessionId?: string;
 }
+
+// Augmentation hook: consumers can declare module "zas-sso-client" and merge fields into this.
+export interface UserExtras {}
+
+export interface User extends BaseUser, UserExtras {}
 
 export type SessionData = {
   user: User | null;

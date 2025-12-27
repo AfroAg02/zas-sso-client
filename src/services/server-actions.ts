@@ -21,14 +21,7 @@ export const persistUserSessionInCookies = async (
   try {
     const data: SessionData = {
       tokens: session.tokens as Tokens,
-      user: {
-        id: session.user?.id as number,
-        name: session.user?.name as string,
-        emails: session.user?.emails as Email[],
-        phones: session.user?.phones as Phone[],
-        photoUrl: session.user?.photoUrl as string,
-        sessionId: session.user?.sessionId ?? "",
-      },
+      user: null,
     };
 
     await setSessionCookies(data);
@@ -141,10 +134,11 @@ export const getCookiesSession = async () => {
   try {
     const decryptedData = await decrypt(encryptedSession);
     const sessionData = JSON.parse(decryptedData) as SessionData;
+    const userData = await fetchUser(sessionData.tokens!.accessToken);
     if (!sessionData || !sessionData.tokens) {
       return { user: null, tokens: null, shouldClear: true };
     }
-    return JSON.parse(decryptedData) as SessionData;
+    return { user: userData.data, tokens: sessionData.tokens, shouldClear: false };
   } catch {
     return { user: null, tokens: null, shouldClear: true };
   }

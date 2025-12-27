@@ -6,7 +6,6 @@ Módulo que habilita autenticación SSO basada en tokens (access / refresh) con 
 
 ## 1. Instalación
 
-
 ```
 npm install zas-sso-client --legacy-peer-deps
 # o
@@ -282,3 +281,38 @@ Tipos: Tokens, SessionData, User, SSOInitOptions, etc.
 ## 14. Licencia
 
 Propietario interno. Ajusta según distribución (MIT / Proprietary).
+
+---
+
+## 15. Extender el tipo `User` (Module Augmentation)
+
+Este paquete expone un punto de augmentación para que puedas añadir campos propios al tipo `User` sin modificar el paquete.
+
+- Base interna: `User` está compuesto como `BaseUser & UserExtras`.
+- Tú puedes extender `UserExtras` desde tu proyecto consumidor.
+
+Pasos:
+
+1. Crea un archivo de declaración de tipos en tu app (por ejemplo `types/zas-sso-client.d.ts`).
+2. Asegúrate de que tu `tsconfig.json` incluye ese archivo (vía `include`/`files` según tu setup).
+3. Declara el módulo del paquete y extiende `UserExtras`:
+
+```ts
+// types/zas-sso-client.d.ts
+declare module "zas-sso-client" {
+  // Estos campos se suman a los de BaseUser (id, name, emails, phones, photoUrl, sessionId)
+  interface UserExtras {
+    role?: "admin" | "user";
+    departmentId?: number;
+    // añade aquí tus propiedades específicas
+  }
+}
+```
+
+Notas importantes:
+
+- No puedes eliminar ni cambiar el tipo de las propiedades base (`BaseUser`). Sólo añadir campos nuevos.
+- `User` seguirá teniendo las propiedades base y, además, las que declares en `UserExtras`.
+- El nombre del módulo a declarar debe coincidir con el nombre del paquete: `zas-sso-client`.
+
+Con esto, todos los lugares que usan `User` en tu app verán los campos adicionales sin importar directamente nada distinto del paquete.
