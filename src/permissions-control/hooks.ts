@@ -1,7 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { checkPermission, fetchMyPermissions, Permission } from "./server";
+import {
+  checkPermission,
+  fetchMyPermissions,
+  Permission,
+  ApiResult,
+} from "./server";
 
 /**
  * usePermissions
@@ -12,7 +17,7 @@ export function usePermissions(options?: {
   staleTime?: number; // default 60s
 }) {
   const { enabled = true, staleTime = 60_000 } = options || {};
-  return useQuery<Permission[], Error>({
+  return useQuery<ApiResult<Permission[]>, Error>({
     queryKey: ["permissions", "me"],
     enabled,
     staleTime,
@@ -30,10 +35,10 @@ export function usePermissionCheck(
     enabled?: boolean;
     refetchInterval?: number;
     staleTime?: number; // default 30s
-  }
+  },
 ) {
   const { enabled = true, refetchInterval, staleTime = 30_000 } = options || {};
-  return useQuery<boolean, Error>({
+  return useQuery<ApiResult<{ allowed: boolean }>, Error>({
     queryKey: ["permission", "check", code],
     enabled: enabled && !!code,
     refetchInterval,
