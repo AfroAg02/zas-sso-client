@@ -10,12 +10,19 @@ function normalizeUrl(url?: string) {
   return url.replace(/\/+$/, ""); // Elimina todos los slashes de cierre
 }
 
+// Parse boolean env values safely, handling quotes and common truthy forms
+function parseBooleanEnv(val?: string): boolean {
+  if (!val) return false;
+  const clean = val.trim().replace(/^['"]|['"]$/g, "");
+  return /^(true|1|yes|on)$/i.test(clean);
+}
+
 const apiBase = normalizeUrl(
   process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com",
 );
 
 const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
-const debugEnv = process.env.SSO_DEBUG?.toLowerCase() === "true";
+const debugEnv = parseBooleanEnv(process.env.SSO_DEBUG);
 
 const config = {
   NEXT_PUBLIC_APP_URL: normalizeUrl(process.env.NEXT_PUBLIC_APP_URL),
@@ -37,7 +44,7 @@ const config = {
     me: `${apiBase}/users/me`,
   },
   AUTOMATIC_REDIRECT_ON_REFRESH: true,
-  DEBUG: Boolean(debugEnv) || false,
+  DEBUG: debugEnv || false,
 };
 
 // Getters (aseguran que siempre se lea el valor actualizado)

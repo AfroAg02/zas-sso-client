@@ -71,7 +71,8 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
     const expiresIn = tokenClaims.exp - now;
     const refreshInMs = Math.max((expiresIn - refreshThreshold) * 1000, 0);
 
-    setNextRefreshAt(Date.now() + refreshInMs);
+    const nextAt = Date.now() + refreshInMs;
+    setNextRefreshAt((prev) => (prev !== nextAt ? nextAt : prev));
 
     const timeoutId = setTimeout(async () => {
       await refreshTokens({
@@ -94,7 +95,7 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
 
     return () => clearTimeout(timeoutId); // limpiar cuando cambie el session
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.tokens]);
+  }, [session?.tokens?.accessToken, session?.tokens?.refreshToken]);
   useEffect(() => {
     const logs = readLogs();
     if (logs.length > 0) setLastLog(logs[logs.length - 1]);
