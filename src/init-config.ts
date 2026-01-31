@@ -11,19 +11,20 @@ function normalizeUrl(url?: string) {
 }
 
 const apiBase = normalizeUrl(
-  process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com"
+  process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com",
 );
 
 const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
+const debugEnv = process.env.SSO_DEBUG?.toLowerCase() === "true";
 
 const config = {
   NEXT_PUBLIC_APP_URL: normalizeUrl(process.env.NEXT_PUBLIC_APP_URL),
   NEXT_PUBLIC_SSO_URL: normalizeUrl(
-    process.env.NEXT_PUBLIC_SSO_URL ?? "https://login.zasdistributor.com/login"
+    process.env.NEXT_PUBLIC_SSO_URL ?? "https://login.zasdistributor.com/login",
   ),
   REDIRECT_URI: "/",
   REGISTER_REDIRECT_URI: normalizeUrl(
-    process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/"
+    process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/",
   ),
   MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
   COOKIE_SESSION_NAME: "session",
@@ -36,6 +37,7 @@ const config = {
     me: `${apiBase}/users/me`,
   },
   AUTOMATIC_REDIRECT_ON_REFRESH: true,
+  DEBUG: Boolean(debugEnv) || false,
 };
 
 // Getters (aseguran que siempre se lea el valor actualizado)
@@ -55,12 +57,15 @@ export function getRedirectUri() {
 export function getregisterCallbackUri() {
   console.log(
     "Register Callback URI: on GET CONFIG",
-    config.REGISTER_REDIRECT_URI
+    config.REGISTER_REDIRECT_URI,
   );
   return config.REGISTER_REDIRECT_URI;
 }
 export function getEndpoints() {
   return config.ENDPOINTS;
+}
+export function getDebug() {
+  return config.DEBUG;
 }
 
 // Inicializador para sobrescribir valores
@@ -81,12 +86,15 @@ export function initSSO(options: SSOInitOptions) {
       Object.entries(options.endpoints).map(([k, v]) => [
         k,
         typeof v === "string" ? v.replace(/([^:]\/)\/+/g, "$1/") : v,
-      ])
+      ]),
     );
     config.ENDPOINTS = { ...config.ENDPOINTS, ...normalizedOverrides };
   }
   if (typeof options.automaticRedirectOnRefresh === "boolean") {
     config.AUTOMATIC_REDIRECT_ON_REFRESH = options.automaticRedirectOnRefresh;
+  }
+  if (typeof options.debug === "boolean") {
+    config.DEBUG = options.debug;
   }
 
   const middleware = createSSOMiddleware(options);

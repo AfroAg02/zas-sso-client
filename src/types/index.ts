@@ -51,6 +51,7 @@ export interface SSOInitOptions {
   registerCallbackUri?: string;
   cookieMaxAgeSeconds?: number;
   automaticRedirectOnRefresh?: boolean;
+  debug?: boolean;
   endpoints?: Partial<{
     login: string;
     refresh: string;
