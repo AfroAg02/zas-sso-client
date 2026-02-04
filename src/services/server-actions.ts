@@ -16,7 +16,7 @@ import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
 //# Almacenar sesión en cookies
 export const persistUserSessionInCookies = async (
   session: SessionData,
-  callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void }
+  callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ) => {
   try {
     const data: SessionData = {
@@ -52,7 +52,7 @@ export const deleteCookiesSession = async (callbacks?: {
 // Autenticar con credenciales
 export const authenticateWithTokens = async (
   credentials: Tokens,
-  callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void }
+  callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ): Promise<ApiResponse<User | null>> => {
   try {
     const userResponse = await fetchUser(credentials.accessToken);
@@ -76,10 +76,10 @@ export const authenticateWithTokens = async (
 };
 
 // Refrescar token
-export const refreshTokens = async (callbacks?: {
-  onSuccess?: () => void;
-  onError?: (error: unknown) => void;
-}) => {
+export const refreshTokens = async (): Promise<{
+  success: boolean;
+  message?: string;
+}> => {
   try {
     const session = await getCookiesSession();
     if (!session?.tokens?.refreshToken) throw new Error("No session");
@@ -91,29 +91,41 @@ export const refreshTokens = async (callbacks?: {
       body: JSON.stringify({ refreshToken: session.tokens.refreshToken }),
     });
 
-    if (!response.ok) return handleApiServerError(response);
+    if (!response.ok) {
+      const errorRes = await handleApiServerError(response);
+      return { success: false, message: errorRes.message };
+    }
 
     const tokens: Tokens = await response.json();
     let user = session.user;
     if (!user && tokens.accessToken) {
       const userResponse = await fetchUser(tokens.accessToken, me);
-      if (!userResponse.data) return handleApiServerError(response);
+      if (!userResponse.data) {
+        return {
+          success: false,
+          message: (userResponse as any)?.message || "Failed to fetch user",
+        };
+      }
       user = userResponse.data;
     }
-    if (!user) return handleApiServerError(response);
+    if (!user) return { success: false, message: "User not identified" };
+
     await persistUserSessionInCookies({ user, tokens });
-    callbacks?.onSuccess?.();
+    return { success: true };
   } catch (error) {
     await deleteCookiesSession();
-    callbacks?.onError?.(error);
     console.error("Error refreshing tokens:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 };
 
 // Obtener información de usuario
 const fetchUser = async (
   accessToken: string,
-  endpoint?: string
+  endpoint?: string,
 ): Promise<ApiResponse<User>> => {
   const { me } = getEndpoints();
   const url = endpoint || me;

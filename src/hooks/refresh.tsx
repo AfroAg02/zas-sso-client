@@ -75,22 +75,16 @@ export default function Refresh({ children }: { children: React.ReactNode }) {
     setNextRefreshAt((prev) => (prev !== nextAt ? nextAt : prev));
 
     const timeoutId = setTimeout(async () => {
-      await refreshTokens({
-        onSuccess: () => {
-          appendLog({ time: Date.now(), status: "success" });
-        },
-        onError: (err) => {
-          const message =
-            err instanceof Error
-              ? err.message
-              : typeof err === "string"
-                ? err
-                : "Unknown error";
-          setError(message as string);
-          appendLog({ time: Date.now(), status: "error", message });
-          console.error("Error refreshing tokens:", err);
-        },
-      });
+      const result = await refreshTokens();
+      if (result.success) {
+        appendLog({ time: Date.now(), status: "success" });
+        await session.reloadSession();
+      } else {
+        const message = result.message || "Unknown error";
+        setError(message);
+        appendLog({ time: Date.now(), status: "error", message });
+        console.error("Error refreshing tokens:", message);
+      }
     }, refreshInMs);
 
     return () => clearTimeout(timeoutId); // limpiar cuando cambie el session
