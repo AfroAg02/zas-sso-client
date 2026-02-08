@@ -8,8 +8,9 @@ import {
   setSessionCookies,
 } from "../lib/cookies";
 import { decrypt } from "../lib/crypto";
-import { Email, Phone, SessionData, Tokens, User } from "../types";
+import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
+import { getJWTClaims } from "@/edge";
 
 // Tipos
 
@@ -76,29 +77,34 @@ export const authenticateWithTokens = async (
 };
 
 // Refrescar token
-export const refreshTokens = async (): Promise<{
+export const refreshTokens = async (
+  refreshToken?: string,
+): Promise<{
   success: boolean;
   message?: string;
 }> => {
   try {
-    const session = await getCookiesSession();
-    if (!session?.tokens?.refreshToken) throw new Error("No session");
+    console.log(
+      FgYellow + "[refreshTokens] Iniciando refresh de tokens" + Reset,
+    );
+    const token =
+      refreshToken ?? (await getCookiesSession()).tokens?.refreshToken;
+    if (!token) throw new Error("No session");
 
     const { refresh, me } = getEndpoints();
     const response = await fetch(refresh, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken: session.tokens.refreshToken }),
+      body: JSON.stringify({ refreshToken: token }),
     });
 
     if (!response.ok) {
       const errorRes = await handleApiServerError(response);
       return { success: false, message: errorRes.message };
     }
-
+    let user: User | null = null;
     const tokens: Tokens = await response.json();
-    let user = session.user;
-    if (!user && tokens.accessToken) {
+    if (tokens.accessToken) {
       const userResponse = await fetchUser(tokens.accessToken, me);
       if (!userResponse.data) {
         return {
@@ -135,8 +141,17 @@ const fetchUser = async (
   if (!response.ok) return handleApiServerError(response);
   return buildApiResponseAsync<User>(response);
 };
+// Colores comunes (solo para depuración local, no influyen en la lógica)
+const Reset = "\x1b[0m";
+const FgRed = "\x1b[31m";
+const FgGreen = "\x1b[32m";
+const FgYellow = "\x1b[33m";
 
-export const getCookiesSession = async () => {
+console.log(FgGreen + "✔ Configuración cargada correctamente" + Reset);
+console.log(FgRed + "✘ Error en el motor de autenticación" + Reset);
+
+export const getCookiesSession = async (): Promise<SessionData> => {
+  // Obtener sesion de la cookie
   const encryptedSession = await readCookies();
 
   if (!encryptedSession) {
@@ -146,10 +161,71 @@ export const getCookiesSession = async () => {
   try {
     const decryptedData = await decrypt(encryptedSession);
     const sessionData = JSON.parse(decryptedData) as SessionData;
-    const userData = await fetchUser(sessionData.tokens!.accessToken);
+
     if (!sessionData || !sessionData.tokens) {
       return { user: null, tokens: null, shouldClear: true };
     }
+
+    // Validar claims del token para detectar expiración o manipulación antes de usar la sesión.
+    const claims = getJWTClaims(sessionData.tokens.accessToken);
+    const now = new Date();
+    const minutesLeft = claims?.expiresAt
+      ? Math.round((claims.expiresAt.getTime() - now.getTime()) / 60000)
+      : null;
+
+    console.log(
+      FgYellow + "[getCookiesSession] Verificando expiración del token" + Reset,
+      {
+        expiresAt: claims?.expiresAt?.toISOString() ?? null,
+        now: now.toISOString(),
+        minutesLeft,
+      },
+    );
+
+    const isExpired =
+      !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+
+    if (isExpired) {
+      // Si el access token está expirado, intentar refrescar con el refresh token de la sesión
+      try {
+        console.log(
+          FgYellow +
+            "[getCookiesSession] Token expirado, iniciando proceso de refresh" +
+            Reset,
+        );
+        await refreshTokens(sessionData.tokens.refreshToken);
+      } catch (e) {
+        console.error(
+          "Error while trying to refresh expired token from session",
+          e,
+        );
+      }
+
+      // Volver a leer la sesión desde las cookies después del refresh
+      const refreshedEncrypted = await readCookies();
+      if (!refreshedEncrypted) {
+        return { user: null, tokens: null, shouldClear: true };
+      }
+
+      try {
+        const refreshedDecrypted = await decrypt(refreshedEncrypted);
+        const refreshedSession = JSON.parse(refreshedDecrypted) as SessionData;
+        if (!refreshedSession || !refreshedSession.tokens) {
+          return { user: null, tokens: null, shouldClear: true };
+        }
+        const userData = await fetchUser(refreshedSession.tokens.accessToken);
+        return {
+          user: userData.data ?? null,
+          tokens: refreshedSession.tokens,
+          shouldClear: false,
+        };
+      } catch {
+        return { user: null, tokens: null, shouldClear: true };
+      }
+    }
+
+    // Token válido: usar el access token actual
+    const userData = await fetchUser(sessionData.tokens.accessToken);
     return {
       user: userData.data ?? null,
       tokens: sessionData.tokens,

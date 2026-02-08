@@ -1,6 +1,6 @@
 "use client";
-import { AuthProvider } from "../context/auth-context";
-import Refresh from "../hooks/refresh";
+
+import { AuthProvider } from "@/context/auth-context";
 
 
 type Props = {
@@ -9,5 +9,5 @@ type Props = {
 
 export default function SSOProvider({ children }: Readonly<Props>) {
 
-  return <AuthProvider><Refresh>{children}</Refresh></AuthProvider>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

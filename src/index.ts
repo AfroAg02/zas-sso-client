@@ -26,7 +26,6 @@ export {
 export { default as SSOProvider } from "./providers/sso-provider";
 
 // ---- Hooks de cliente ----
-export { default as Refresh } from "./hooks/refresh";
 export { useAuth } from "./hooks/use-auth";
 export {
   usePermissionCheck,
