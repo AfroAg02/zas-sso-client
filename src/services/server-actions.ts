@@ -10,47 +10,183 @@ import {
 import { decrypt } from "../lib/crypto";
 import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
-import { getJWTClaims } from "@/edge";
+import { getJWTClaims } from "../edge"; // Eliminado el @
 
-// Tipos
+// --- Configuración de Logs ---
+const Reset = "\x1b[0m";
+const FgRed = "\x1b[31m";
+const FgGreen = "\x1b[32m";
+const FgYellow = "\x1b[33m";
+const FgCyan = "\x1b[36m";
 
-//# Almacenar sesión en cookies
+/**
+ * Almacena de forma segura la sesión del usuario en las cookies.
+ * @param session Objeto con los tokens y datos del usuario.
+ * @param callbacks Funciones opcionales de éxito o error.
+ */
 export const persistUserSessionInCookies = async (
   session: SessionData,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ) => {
   try {
+    // Solo guardamos tokens y lo necesario para mantener la sesión ligera
     const data: SessionData = {
       tokens: session.tokens as Tokens,
-      user: null,
+      user: session.user, // Mantenemos el usuario si viene incluido
+      shouldClear: false
     };
 
     await setSessionCookies(data);
-
     callbacks?.onSuccess?.();
   } catch (error) {
-    console.error("Error persisting session in cookies:", error);
+    console.error(FgRed + "[persistUserSessionInCookies] Error persistiendo sesión:" + Reset, error);
     callbacks?.onError?.(error);
     throw error;
   }
 };
 
-//# Eliminar sesión de las cookies
+/**
+ * Elimina las cookies de sesión y limpia el estado de autenticación.
+ */
 export const deleteCookiesSession = async (callbacks?: {
   onSuccess?: () => void;
   onError?: (error: unknown) => void;
 }) => {
   try {
     await clearSessionCookies();
-
     callbacks?.onSuccess?.();
   } catch (error) {
+    console.error(FgRed + "[deleteCookiesSession] Error al eliminar cookies:" + Reset, error);
     callbacks?.onError?.(error);
     throw error;
   }
 };
 
-// Autenticar con credenciales
+/**
+ * Obtiene el perfil del usuario desde la API externa.
+ * @param accessToken Token de acceso actual.
+ * @param endpoint URL opcional del perfil.
+ */
+const fetchUser = async (
+  accessToken: string,
+  endpoint?: string,
+): Promise<ApiResponse<User>> => {
+  try {
+    const { me } = getEndpoints();
+    const url = endpoint || me;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store", // Evitar datos cacheados en autenticación
+    });
+
+    if (!response.ok) return handleApiServerError(response);
+    return buildApiResponseAsync<User>(response);
+  } catch (error) {
+    console.error(FgRed + "[fetchUser] Error en fetch de usuario:" + Reset, error);
+    return { data: null as any, status: 500, error: true };
+  }
+};
+
+/**
+ * Realiza el intercambio de un refresh token por nuevos tokens de acceso.
+ * Evita llamar a getCookiesSession para no crear bucles infinitos.
+ * @param refreshToken El token de refresco almacenado.
+ */
+export const refreshTokens = async (
+  refreshToken: string,
+): Promise<{ success: boolean; message?: string; data?: Tokens }> => {
+  try {
+    console.log(FgYellow + "[refreshTokens] 🔄 Iniciando rotación de tokens..." + Reset);
+    
+    const { refresh } = getEndpoints();
+    const response = await fetch(refresh, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      const errorRes = await handleApiServerError(response);
+      console.log(FgRed + "[refreshTokens] ❌ Fallo en el servidor de identidad" + Reset);
+      return { success: false, message: errorRes.message };
+    }
+
+    const newTokens: Tokens = await response.json();
+    console.log(FgGreen + "[refreshTokens] ✅ Tokens renovados exitosamente" + Reset);
+
+    return { success: true, data: newTokens };
+  } catch (error) {
+    console.error(FgRed + "[refreshTokens] Error crítico en el proceso de refresh:" + Reset, error);
+    return { success: false, message: "Critical refresh error" };
+  }
+};
+
+/**
+ * Orquestador principal de la sesión. 
+ * Lee, valida, refresca si es necesario y devuelve la sesión activa.
+ */
+export const getCookiesSession = async (): Promise<SessionData> => {
+  const encryptedSession = await readCookies();
+
+  if (!encryptedSession) {
+    return { user: null, tokens: null, shouldClear: false };
+  }
+
+  try {
+    const decryptedData = await decrypt(encryptedSession);
+    let sessionData = JSON.parse(decryptedData) as SessionData;
+
+    if (!sessionData || !sessionData.tokens) {
+      return { user: null, tokens: null, shouldClear: true };
+    }
+
+    // Análisis de expiración mediante el JWT
+    const claims = getJWTClaims(sessionData.tokens.accessToken);
+    const now = new Date();
+    const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+
+    if (isExpired) {
+      console.log(FgCyan + "[getCookiesSession] ⚠️ Token expirado. Intentando refresh..." + Reset);
+      
+      const refreshResult = await refreshTokens(sessionData.tokens.refreshToken);
+
+      if (refreshResult.success && refreshResult.data) {
+        // Obtenemos los datos del usuario con el nuevo token
+        const userRes = await fetchUser(refreshResult.data.accessToken);
+        
+        const updatedSession: SessionData = {
+          tokens: refreshResult.data,
+          user: userRes.data ?? null,
+          shouldClear: false
+        };
+
+        // Guardar nuevos tokens en cookies
+        await persistUserSessionInCookies(updatedSession);
+        return updatedSession;
+      } else {
+        // Si el refresh falla, la sesión ya no es válida
+        console.log(FgRed + "[getCookiesSession] 🚫 Refresh fallido. Limpiando sesión." + Reset);
+        await deleteCookiesSession();
+        return { user: null, tokens: null, shouldClear: true };
+      }
+    }
+
+    // Token aún válido: Si no tenemos el usuario en la sesión, lo buscamos
+    if (!sessionData.user) {
+        const userData = await fetchUser(sessionData.tokens.accessToken);
+        sessionData.user = userData.data ?? null;
+    }
+
+    return sessionData;
+  } catch (error) {
+    console.error(FgRed + "[getCookiesSession] Error procesando sesión:" + Reset, error);
+    return { user: null, tokens: null, shouldClear: true };
+  }
+};
+
+/**
+ * Autentica al usuario por primera vez tras un login exitoso.
+ */
 export const authenticateWithTokens = async (
   credentials: Tokens,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
@@ -63,175 +199,12 @@ export const authenticateWithTokens = async (
       user: userResponse.data,
       tokens: credentials,
     });
+
     callbacks?.onSuccess?.();
-    return {
-      data: userResponse.data,
-      status: userResponse.status,
-      error: false,
-    };
+    return { data: userResponse.data, status: 200, error: false };
   } catch (error) {
-    console.error("Error authenticating with credentials:", error);
+    console.error(FgRed + "[authenticateWithTokens] Error en autenticación inicial:" + Reset, error);
     callbacks?.onError?.(error);
     return { data: null, status: 500, error: true };
-  }
-};
-
-// Refrescar token
-export const refreshTokens = async (
-  refreshToken?: string,
-): Promise<{
-  success: boolean;
-  message?: string;
-}> => {
-  try {
-    console.log(
-      FgYellow + "[refreshTokens] Iniciando refresh de tokens" + Reset,
-    );
-    const token =
-      refreshToken ?? (await getCookiesSession()).tokens?.refreshToken;
-    if (!token) throw new Error("No session");
-
-    const { refresh, me } = getEndpoints();
-    const response = await fetch(refresh, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken: token }),
-    });
-
-    if (!response.ok) {
-      const errorRes = await handleApiServerError(response);
-      return { success: false, message: errorRes.message };
-    }
-    let user: User | null = null;
-    const tokens: Tokens = await response.json();
-    if (tokens.accessToken) {
-      const userResponse = await fetchUser(tokens.accessToken, me);
-      if (!userResponse.data) {
-        return {
-          success: false,
-          message: (userResponse as any)?.message || "Failed to fetch user",
-        };
-      }
-      user = userResponse.data;
-    }
-    if (!user) return { success: false, message: "User not identified" };
-
-    await persistUserSessionInCookies({ user, tokens });
-    return { success: true };
-  } catch (error) {
-    await deleteCookiesSession();
-    console.error("Error refreshing tokens:", error);
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
-};
-
-// Obtener información de usuario
-const fetchUser = async (
-  accessToken: string,
-  endpoint?: string,
-): Promise<ApiResponse<User>> => {
-  const { me } = getEndpoints();
-  const url = endpoint || me;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) return handleApiServerError(response);
-  return buildApiResponseAsync<User>(response);
-};
-// Colores comunes (solo para depuración local, no influyen en la lógica)
-const Reset = "\x1b[0m";
-const FgRed = "\x1b[31m";
-const FgGreen = "\x1b[32m";
-const FgYellow = "\x1b[33m";
-
-console.log(FgGreen + "✔ Configuración cargada correctamente" + Reset);
-console.log(FgRed + "✘ Error en el motor de autenticación" + Reset);
-
-export const getCookiesSession = async (): Promise<SessionData> => {
-  // Obtener sesion de la cookie
-  const encryptedSession = await readCookies();
-
-  if (!encryptedSession) {
-    return { user: null, tokens: null, shouldClear: false };
-  }
-
-  try {
-    const decryptedData = await decrypt(encryptedSession);
-    const sessionData = JSON.parse(decryptedData) as SessionData;
-
-    if (!sessionData || !sessionData.tokens) {
-      return { user: null, tokens: null, shouldClear: true };
-    }
-
-    // Validar claims del token para detectar expiración o manipulación antes de usar la sesión.
-    const claims = getJWTClaims(sessionData.tokens.accessToken);
-    const now = new Date();
-    const minutesLeft = claims?.expiresAt
-      ? Math.round((claims.expiresAt.getTime() - now.getTime()) / 60000)
-      : null;
-
-    console.log(
-      FgYellow + "[getCookiesSession] Verificando expiración del token" + Reset,
-      {
-        expiresAt: claims?.expiresAt?.toISOString() ?? null,
-        now: now.toISOString(),
-        minutesLeft,
-      },
-    );
-
-    const isExpired =
-      !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
-
-    if (isExpired) {
-      // Si el access token está expirado, intentar refrescar con el refresh token de la sesión
-      try {
-        console.log(
-          FgYellow +
-            "[getCookiesSession] Token expirado, iniciando proceso de refresh" +
-            Reset,
-        );
-        await refreshTokens(sessionData.tokens.refreshToken);
-      } catch (e) {
-        console.error(
-          "Error while trying to refresh expired token from session",
-          e,
-        );
-      }
-
-      // Volver a leer la sesión desde las cookies después del refresh
-      const refreshedEncrypted = await readCookies();
-      if (!refreshedEncrypted) {
-        return { user: null, tokens: null, shouldClear: true };
-      }
-
-      try {
-        const refreshedDecrypted = await decrypt(refreshedEncrypted);
-        const refreshedSession = JSON.parse(refreshedDecrypted) as SessionData;
-        if (!refreshedSession || !refreshedSession.tokens) {
-          return { user: null, tokens: null, shouldClear: true };
-        }
-        const userData = await fetchUser(refreshedSession.tokens.accessToken);
-        return {
-          user: userData.data ?? null,
-          tokens: refreshedSession.tokens,
-          shouldClear: false,
-        };
-      } catch {
-        return { user: null, tokens: null, shouldClear: true };
-      }
-    }
-
-    // Token válido: usar el access token actual
-    const userData = await fetchUser(sessionData.tokens.accessToken);
-    return {
-      user: userData.data ?? null,
-      tokens: sessionData.tokens,
-      shouldClear: false,
-    };
-  } catch {
-    return { user: null, tokens: null, shouldClear: true };
   }
 };
