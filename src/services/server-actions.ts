@@ -70,172 +70,6 @@ export const deleteCookiesSession = async (callbacks?: {
   }
 };
 
-/**
- * Obtiene el perfil del usuario desde la API externa.
- * @param accessToken Token de acceso actual.
- * @param endpoint URL opcional del perfil.
- */
-const fetchUser = async (
-  accessToken: string,
-  endpoint?: string,
-): Promise<ApiResponse<User>> => {
-  try {
-    const { me } = getEndpoints();
-    const url = endpoint || me;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store", // Evitar datos cacheados en autenticación
-    });
-
-    if (!response.ok) return handleApiServerError(response);
-    return buildApiResponseAsync<User>(response);
-  } catch (error) {
-    console.error(
-      FgRed + "[fetchUser] Error en fetch de usuario:" + Reset,
-      error,
-    );
-    return { data: null as any, status: 500, error: true };
-  }
-};
-
-/**
- * Realiza el intercambio de un refresh token por nuevos tokens de acceso.
- * Evita llamar a getCookiesSession para no crear bucles infinitos.
- * @param refreshToken El token de refresco almacenado.
- */
-export const refreshTokens = async (
-  refreshToken: string,
-): Promise<{ success: boolean; message?: string; data?: Tokens }> => {
-  try {
-    console.log(
-      FgYellow + "[refreshTokens] 🔄 Iniciando rotación de tokens..." + Reset,
-    );
-
-    const { refresh } = getEndpoints();
-    const response = await fetch(refresh, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (!response.ok) {
-      const errorRes = await handleApiServerError(response);
-      console.log(
-        FgRed + "[refreshTokens] ❌ Fallo en el servidor de identidad" + Reset,
-      );
-      return { success: false, message: errorRes.message };
-    }
-
-    const newTokens: Tokens = await response.json();
-    console.log(
-      FgGreen + "[refreshTokens] ✅ Tokens renovados exitosamente" + Reset,
-    );
-
-    return { success: true, data: newTokens };
-  } catch (error) {
-    console.error(
-      FgRed + "[refreshTokens] Error crítico en el proceso de refresh:" + Reset,
-      error,
-    );
-    return { success: false, message: "Critical refresh error" };
-  }
-};
-
-/**
- * Orquestador principal de la sesión.
- * Lee, valida, refresca si es necesario y devuelve la sesión activa.
- */
-export const getCookiesSession = async (): Promise<SessionData> => {
-  const encryptedSession = await readCookies();
-
-  if (!encryptedSession) {
-    return { user: null, tokens: null, shouldClear: false };
-  }
-
-  try {
-    const decryptedData = await decrypt(encryptedSession);
-    let sessionData = JSON.parse(decryptedData) as SessionData;
-
-    if (!sessionData || !sessionData.tokens) {
-      return { user: null, tokens: null, shouldClear: true };
-    }
-
-    // Análisis de expiración mediante el JWT
-    const claims = getJWTClaims(sessionData.tokens.accessToken);
-    const now = new Date();
-
-    if (claims?.expiresAt) {
-      const expiresAtTime = claims.expiresAt.getTime();
-      const remainingMs = expiresAtTime - now.getTime();
-      const remainingMinutes = Math.max(0, Math.floor(remainingMs / 60000));
-
-      console.log(
-        FgYellow +
-          `[getCookiesSession] ⏱️ Token expira el: ${claims.expiresAt.toISOString()} (en ~${remainingMinutes} minutos)` +
-          Reset,
-      );
-    } else {
-      console.log(
-        FgYellow +
-          "[getCookiesSession] ⏱️ Token sin fecha de expiración en claims. Marcando como expirado por seguridad." +
-          Reset,
-      );
-    }
-
-    const isExpired =
-      !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
-
-    if (isExpired) {
-      console.log(
-        FgCyan +
-          "[getCookiesSession] ⚠️ Token expirado. Intentando refresh..." +
-          Reset,
-      );
-
-      const refreshResult = await refreshTokens(
-        sessionData.tokens.refreshToken,
-      );
-
-      if (refreshResult.success && refreshResult.data) {
-        // Obtenemos los datos del usuario con el nuevo token
-        const userRes = await fetchUser(refreshResult.data.accessToken);
-
-        const updatedSession: SessionData = {
-          tokens: refreshResult.data,
-          user: userRes.data ?? null,
-          shouldClear: false,
-        };
-
-        // Guardar nuevos tokens en cookies
-        await persistUserSessionInCookies(updatedSession);
-        return updatedSession;
-      } else {
-        // Si el refresh falla, la sesión ya no es válida
-        console.log(
-          FgRed +
-            "[getCookiesSession] 🚫 Refresh fallido. Limpiando sesión." +
-            Reset,
-        );
-        await deleteCookiesSession();
-        return { user: null, tokens: null, shouldClear: true };
-      }
-    }
-
-    // Token aún válido: Si no tenemos el usuario en la sesión, lo buscamos
-    if (!sessionData.user) {
-      const userData = await fetchUser(sessionData.tokens.accessToken);
-      sessionData.user = userData.data ?? null;
-    }
-
-    return sessionData;
-  } catch (error) {
-    console.error(
-      FgRed + "[getCookiesSession] Error procesando sesión:" + Reset,
-      error,
-    );
-    return { user: null, tokens: null, shouldClear: true };
-  }
-};
 
 /**
  * Autentica al usuario por primera vez tras un login exitoso.
@@ -264,5 +98,113 @@ export const authenticateWithTokens = async (
     );
     callbacks?.onError?.(error);
     return { data: null, status: 500, error: true };
+  }
+};
+
+
+
+
+/**
+ * Intenta guardar cookies solo si el contexto lo permite (Server Action o Route Handler)
+ */
+const safeSetCookies = async (data: SessionData) => {
+  try {
+    await setSessionCookies(data);
+    return true;
+  } catch (e) {
+    // Si falla, es porque estamos en un Server Component Render
+    console.warn(FgYellow + "[Session] No se pudieron persistir cookies en el render. Se usarán tokens en memoria." + Reset);
+    return false;
+  }
+};
+
+/**
+ * Realiza el refresh contra tu API backend.
+ */
+export const refreshTokens = async (refreshToken: string) => {
+  console.log(FgYellow + "[refreshTokens] 🔄 Refrescando tokens en backend..." + Reset);
+  const { refresh } = getEndpoints();
+  
+  try {
+    const response = await fetch(refresh, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      cache: 'no-store'
+    });
+
+    if (!response.ok) return { success: false };
+    const tokens: Tokens = await response.json();
+    return { success: true, tokens };
+  } catch (error) {
+    console.error(FgRed + "[refreshTokens] Error fatal:" + Reset, error);
+    return { success: false };
+  }
+};
+
+/**
+ * Función principal para obtener la sesión.
+ * Soporta refresco en caliente durante el renderizado.
+ */
+export const getCookiesSession = async (): Promise<SessionData> => {
+  const encryptedSession = await readCookies();
+  if (!encryptedSession) return { user: null, tokens: null, shouldClear: false };
+
+  try {
+    const decryptedData = await decrypt(encryptedSession);
+    const session = JSON.parse(decryptedData) as SessionData;
+
+    if (!session?.tokens?.accessToken) {
+        return { user: null, tokens: null, shouldClear: true };
+    }
+
+    const claims = getJWTClaims(session.tokens.accessToken);
+    const now = new Date();
+    const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+
+    if (isExpired) {
+      console.log(FgCyan + "[getCookiesSession] ⚠️ Token expirado detectado." + Reset);
+      
+      const res = await refreshTokens(session.tokens.refreshToken);
+
+      if (res.success && res.tokens) {
+        const newSession = {
+          ...session,
+          tokens: res.tokens,
+          shouldClear: false
+        };
+
+        // Intentamos guardar, pero si falla (por estar en render), 
+        // al menos devolvemos la sesión nueva para este request.
+        await safeSetCookies(newSession);
+        
+        console.log(FgGreen + "[getCookiesSession] ✅ Sesión actualizada (Memoria)" + Reset);
+        return newSession;
+      }
+
+      console.log(FgRed + "[getCookiesSession] ❌ Refresh fallido." + Reset);
+      return { user: null, tokens: null, shouldClear: true };
+    }
+
+    return session;
+  } catch (error) {
+    console.error(FgRed + "[getCookiesSession] Error decodificando sesión:" + Reset, error);
+    return { user: null, tokens: null, shouldClear: true };
+  }
+};
+
+/**
+ * Obtiene el usuario. Se suele usar después de getCookiesSession.
+ */
+export const fetchUser = async (accessToken: string): Promise<ApiResponse<User>> => {
+  const { me } = getEndpoints();
+  try {
+    const response = await fetch(me, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return handleApiServerError(response);
+    return buildApiResponseAsync<User>(response);
+  } catch (error) {
+    return { data: null as any, status: 500, error: true };
   }
 };
