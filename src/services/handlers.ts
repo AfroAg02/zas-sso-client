@@ -78,4 +78,4 @@ export async function GET(request: Request) {
   const res = NextResponse.redirect(safeRedirect, { status: 302 });
   return res;
 }
-export const handlers = { GET };
+export const handlers = { GET, POST, DELETE };
