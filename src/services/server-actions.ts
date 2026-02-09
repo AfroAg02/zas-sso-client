@@ -6,7 +6,7 @@ import { readCookies, setSessionCookies } from "../lib/cookies";
 import { decrypt } from "../lib/crypto";
 import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
-import { getJWTClaims } from "../edge"; // Eliminado el @
+import { getJWTClaims } from "../edge"; 
 // --- Configuración de Logs ---
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";

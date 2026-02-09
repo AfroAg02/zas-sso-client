@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getRedirectUri, getAppUrl } from "../init-config";
 import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
-import { SessionData } from "@/types";
-import { clearSessionCookies, setSessionCookies } from "@/lib/cookies";
+import { SessionData } from "../types";
+import { clearSessionCookies, setSessionCookies } from "../lib/cookies";
 
 // Orígenes permitidos (puedes ampliar)
 
