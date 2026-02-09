@@ -2,16 +2,11 @@
 
 import { ApiResponse } from "../types/fetch/api";
 import { getEndpoints } from "../init-config";
-import {
-  clearSessionCookies,
-  readCookies,
-  setSessionCookies,
-} from "../lib/cookies";
+import { readCookies, setSessionCookies } from "../lib/cookies";
 import { decrypt } from "../lib/crypto";
 import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
 import { getJWTClaims } from "../edge"; // Eliminado el @
-
 // --- Configuración de Logs ---
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";
@@ -58,7 +53,9 @@ export const deleteCookiesSession = async (callbacks?: {
   onError?: (error: unknown) => void;
 }) => {
   try {
-    await clearSessionCookies();
+    await fetch("/api/sso/login", {
+      method: "DELETE",
+    });
     callbacks?.onSuccess?.();
   } catch (error) {
     console.error(
@@ -69,7 +66,6 @@ export const deleteCookiesSession = async (callbacks?: {
     throw error;
   }
 };
-
 
 /**
  * Autentica al usuario por primera vez tras un login exitoso.
@@ -101,19 +97,26 @@ export const authenticateWithTokens = async (
   }
 };
 
-
-
-
 /**
  * Intenta guardar cookies solo si el contexto lo permite (Server Action o Route Handler)
  */
 const safeSetCookies = async (data: SessionData) => {
   try {
-    await setSessionCookies(data);
+    const res = await fetch("/api/sso/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
     return true;
   } catch (e) {
     // Si falla, es porque estamos en un Server Component Render
-    console.warn(FgYellow + "[Session] No se pudieron persistir cookies en el render. Se usarán tokens en memoria." + Reset);
+    console.warn(
+      FgYellow +
+        "[Session] No se pudieron persistir cookies en el render. Se usarán tokens en memoria." +
+        Reset,
+    );
     return false;
   }
 };
@@ -122,15 +125,17 @@ const safeSetCookies = async (data: SessionData) => {
  * Realiza el refresh contra tu API backend.
  */
 export const refreshTokens = async (refreshToken: string) => {
-  console.log(FgYellow + "[refreshTokens] 🔄 Refrescando tokens en backend..." + Reset);
+  console.log(
+    FgYellow + "[refreshTokens] 🔄 Refrescando tokens en backend..." + Reset,
+  );
   const { refresh } = getEndpoints();
-  
+
   try {
     const response = await fetch(refresh, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
-      cache: 'no-store'
+      cache: "no-store",
     });
 
     if (!response.ok) return { success: false };
@@ -148,37 +153,45 @@ export const refreshTokens = async (refreshToken: string) => {
  */
 export const getCookiesSession = async (): Promise<SessionData> => {
   const encryptedSession = await readCookies();
-  if (!encryptedSession) return { user: null, tokens: null, shouldClear: false };
+  if (!encryptedSession)
+    return { user: null, tokens: null, shouldClear: false };
 
   try {
     const decryptedData = await decrypt(encryptedSession);
     const session = JSON.parse(decryptedData) as SessionData;
 
     if (!session?.tokens?.accessToken) {
-        return { user: null, tokens: null, shouldClear: true };
+      return { user: null, tokens: null, shouldClear: true };
     }
 
     const claims = getJWTClaims(session.tokens.accessToken);
     const now = new Date();
-    const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+    const isExpired =
+      !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
 
     if (isExpired) {
-      console.log(FgCyan + "[getCookiesSession] ⚠️ Token expirado detectado." + Reset);
-      
+      console.log(
+        FgCyan + "[getCookiesSession] ⚠️ Token expirado detectado." + Reset,
+      );
+
       const res = await refreshTokens(session.tokens.refreshToken);
 
       if (res.success && res.tokens) {
         const newSession = {
           ...session,
           tokens: res.tokens,
-          shouldClear: false
+          shouldClear: false,
         };
 
-        // Intentamos guardar, pero si falla (por estar en render), 
+        // Intentamos guardar, pero si falla (por estar en render),
         // al menos devolvemos la sesión nueva para este request.
         await safeSetCookies(newSession);
-        
-        console.log(FgGreen + "[getCookiesSession] ✅ Sesión actualizada (Memoria)" + Reset);
+
+        console.log(
+          FgGreen +
+            "[getCookiesSession] ✅ Sesión actualizada (Memoria)" +
+            Reset,
+        );
         return newSession;
       }
 
@@ -188,7 +201,10 @@ export const getCookiesSession = async (): Promise<SessionData> => {
 
     return session;
   } catch (error) {
-    console.error(FgRed + "[getCookiesSession] Error decodificando sesión:" + Reset, error);
+    console.error(
+      FgRed + "[getCookiesSession] Error decodificando sesión:" + Reset,
+      error,
+    );
     return { user: null, tokens: null, shouldClear: true };
   }
 };
@@ -196,7 +212,9 @@ export const getCookiesSession = async (): Promise<SessionData> => {
 /**
  * Obtiene el usuario. Se suele usar después de getCookiesSession.
  */
-export const fetchUser = async (accessToken: string): Promise<ApiResponse<User>> => {
+export const fetchUser = async (
+  accessToken: string,
+): Promise<ApiResponse<User>> => {
   const { me } = getEndpoints();
   try {
     const response = await fetch(me, {

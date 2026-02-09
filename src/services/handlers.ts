@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getRedirectUri, getAppUrl } from "../init-config";
 import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
+import { SessionData } from "@/types";
+import { clearSessionCookies, setSessionCookies } from "@/lib/cookies";
 
 // Orígenes permitidos (puedes ampliar)
 
@@ -9,13 +11,35 @@ function jsonError(
   message: string,
   status: number,
   origin: string | null,
-  extra?: any
+  extra?: any,
 ) {
   const res = NextResponse.json(
     { ok: false, error: message, ...extra },
-    { status }
+    { status },
   );
   return res;
+}
+
+export async function POST(request: Request) {
+  const data = (await request.json()) as SessionData;
+  try {
+    await setSessionCookies(data);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[handlers] Error setting cookies:", e);
+    return jsonError("Failed to set session cookies", 500, null);
+  }
+}
+
+export async function DELETE(request: Request) {
+  const data = (await request.json()) as SessionData;
+  try {
+    await clearSessionCookies();
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[handlers] Error clearing cookies:", e);
+    return jsonError("Failed to clear session cookies", 500, null);
+  }
 }
 
 export async function GET(request: Request) {
@@ -31,20 +55,20 @@ export async function GET(request: Request) {
 
   const result = await authenticateWithTokens(
     { accessToken, refreshToken },
-    { onError: (e: any) => console.error("[callback] authenticate error", e) }
+    { onError: (e: any) => console.error("[callback] authenticate error", e) },
   );
 
   if (result.error || !result.data) {
     return jsonError(
       "Invalid credentials or user fetch failed",
       result.status || 401,
-      origin
+      origin,
     );
   }
   const redirectUri = getRedirectUri();
   // Redirección segura (sanitize)
   const safeUrl = new URL(
-    parseRedirectUrl(redirectUri, getAppUrl() || url.origin)
+    parseRedirectUrl(redirectUri, getAppUrl() || url.origin),
   );
   safeUrl.searchParams.delete("accessToken");
   safeUrl.searchParams.delete("refreshToken");
