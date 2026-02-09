@@ -1,1 +1,1 @@
-{"version":3,"file":"sso-provider.d.ts","sourceRoot":"","sources":["../../src/providers/sso-provider.tsx"],"names":[],"mappings":"AAKA,KAAK,KAAK,GAAG;IACX,QAAQ,EAAE,KAAK,CAAC,SAAS,CAAC;CAC3B,CAAC;AAEF,MAAM,CAAC,OAAO,UAAU,WAAW,CAAC,EAAE,QAAQ,EAAE,EAAE,QAAQ,CAAC,KAAK,CAAC,2CAGhE"}
+{"version":3,"file":"sso-provider.d.ts","sourceRoot":"","sources":["../../src/providers/sso-provider.tsx"],"names":[],"mappings":"AAIA,KAAK,KAAK,GAAG;IACX,QAAQ,EAAE,KAAK,CAAC,SAAS,CAAC;CAC3B,CAAC;AAEF,MAAM,CAAC,OAAO,UAAU,WAAW,CAAC,EAAE,QAAQ,EAAE,EAAE,QAAQ,CAAC,KAAK,CAAC,2CAEhE"}

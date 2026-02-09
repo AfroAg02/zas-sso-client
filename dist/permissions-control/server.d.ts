@@ -17,6 +17,13 @@ export interface PaginatedPermissions {
     hasNext: boolean;
     hasPrevious: boolean;
 }
-export declare function fetchMyPermissions(): Promise<Permission[]>;
-export declare function checkPermission(code: string): Promise<boolean>;
+export interface ApiResult<T> {
+    status: number;
+    error?: string;
+    data?: T;
+}
+export declare function fetchMyPermissions(): Promise<ApiResult<Permission[]>>;
+export declare function checkPermission(code: string): Promise<ApiResult<{
+    allowed: boolean;
+}>>;
 //# sourceMappingURL=server.d.ts.map

@@ -9,11 +9,13 @@ function authHeaders(token) {
 }
 export async function fetchMyPermissions() {
     const session = await getCookiesSession();
-    if (!session?.tokens?.accessToken)
-        throw new Error("No session");
+    if (!session?.tokens?.accessToken) {
+        return { status: 401, error: "No session" };
+    }
     const all = [];
     let page = 1;
     const pageSize = 10000;
+    console.log("Fetching permissions from server...", ENDPOINTS.permissions);
     while (true) {
         const url = `${ENDPOINTS.permissions}?page=${page}&pageSize=${pageSize}`;
         const res = await fetch(url, {
@@ -22,9 +24,20 @@ export async function fetchMyPermissions() {
             cache: "no-store",
         });
         if (!res.ok) {
-            if (res.status === 401)
-                throw new Error("Unauthorized");
-            throw new Error(`Failed to load permissions (${res.status})`);
+            if (res.status === 401) {
+                return { status: 401, error: "Unauthorized" };
+            }
+            // Try to extract error detail if available
+            let detail;
+            try {
+                const body = await res.json();
+                detail = body?.detail;
+            }
+            catch { }
+            return {
+                status: res.status,
+                error: detail || `Failed to load permissions (${res.status})`,
+            };
         }
         const body = (await res.json());
         if (Array.isArray(body.data))
@@ -33,27 +46,36 @@ export async function fetchMyPermissions() {
             break;
         page += 1;
     }
-    return all;
+    return { status: 200, data: all };
 }
 export async function checkPermission(code) {
     const session = await getCookiesSession();
-    if (!session?.tokens?.accessToken)
-        throw new Error("No session");
+    if (!session?.tokens?.accessToken) {
+        return { status: 401, error: "No session" };
+    }
     const res = await fetch(ENDPOINTS.check(code), {
         method: "GET",
         headers: { ...authHeaders(session.tokens.accessToken) },
         cache: "no-store",
     });
     if (res.status === 200)
-        return true;
+        return { status: 200, data: { allowed: true } };
     if (res.status === 403)
-        return false;
+        return { status: 403, data: { allowed: false } };
     if (res.status === 401)
-        throw new Error("Unauthorized");
+        return { status: 401, error: "Unauthorized" };
     if (res.status === 400) {
-        const body = await res.json();
-        throw new Error(body?.detail || "Invalid request");
+        try {
+            const body = await res.json();
+            return {
+                status: 400,
+                error: body?.detail || "Invalid request",
+            };
+        }
+        catch {
+            return { status: 400, error: "Invalid request" };
+        }
     }
-    throw new Error(`Unexpected status ${res.status}`);
+    return { status: res.status, error: `Unexpected status ${res.status}` };
 }
 //# sourceMappingURL=server.js.map

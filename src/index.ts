@@ -15,6 +15,7 @@ export {
   initSSO,
   getregisterCallbackUri,
   SSO,
+  getConfig,
 } from "./init-config";
 
 // ---- Proveedor principal y contexto ----

@@ -1,8 +1,8 @@
 "use server";
 
 import { ApiResponse } from "../types/fetch/api";
-import { getEndpoints } from "../init-config";
-import { readCookies, setSessionCookies } from "../lib/cookies";
+import { getEndpoints, getAppUrl } from "../init-config";
+import { readCookies, setSessionCookies, clearSessionCookies } from "../lib/cookies";
 import { decrypt } from "../lib/crypto";
 import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
@@ -53,9 +53,7 @@ export const deleteCookiesSession = async (callbacks?: {
   onError?: (error: unknown) => void;
 }) => {
   try {
-    await fetch("/api/sso/login", {
-      method: "DELETE",
-    });
+    await clearSessionCookies();
     callbacks?.onSuccess?.();
   } catch (error) {
     console.error(
@@ -102,7 +100,10 @@ export const authenticateWithTokens = async (
  */
 const safeSetCookies = async (data: SessionData) => {
   try {
-    const res = await fetch("/api/sso/login", {
+    const appUrl = getAppUrl();
+    const endpoint = appUrl ? `${appUrl}/api/sso/login` : "/api/sso/login";
+
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -7,10 +7,9 @@
  * NOTA: Si en el futuro algún export se considera interno, muévelo a la sección marcada
  * como "internos" o elimínalo de aquí para evitar breaking changes innecesarios.
  */
-export { getRedirectUri, initSSO, SSO } from "./init-config";
+export { getRedirectUri, initSSO, getregisterCallbackUri, SSO, getConfig, } from "./init-config";
 export { AuthProvider, useAuthContext, type AuthContextState, } from "./context/auth-context";
 export { default as SSOProvider } from "./providers/sso-provider";
-export { default as Refresh } from "./hooks/refresh";
 export { useAuth } from "./hooks/use-auth";
 export { usePermissionCheck, usePermissions, } from "./permissions-control/hooks";
 export { deleteCookiesSession as serverSignOut, getCookiesSession as getServerSession, } from "./services/server-actions";
@@ -19,4 +18,5 @@ export { getJWTClaims } from "./lib/decode";
 export { getLoginUrl, redirectToLogin } from "./lib/url";
 export type * from "./types";
 export { handlers as ssoHandlers } from "./services/handlers";
+export { createSSOMiddleware, buildMiddlewareConfig } from "./lib/middleware";
 //# sourceMappingURL=index.d.ts.map

@@ -9,12 +9,11 @@
  */
 // ---- Inicialización / Config (solo API pública necesaria) ----
 // Mantén la superficie mínima necesaria para consumir el paquete.
-export { getRedirectUri, initSSO, SSO } from "./init-config";
+export { getRedirectUri, initSSO, getregisterCallbackUri, SSO, getConfig, } from "./init-config";
 // ---- Proveedor principal y contexto ----
 export { AuthProvider, useAuthContext, } from "./context/auth-context";
 export { default as SSOProvider } from "./providers/sso-provider";
 // ---- Hooks de cliente ----
-export { default as Refresh } from "./hooks/refresh";
 export { useAuth } from "./hooks/use-auth";
 export { usePermissionCheck, usePermissions, } from "./permissions-control/hooks";
 // ---- Server actions públicas ----
@@ -27,6 +26,7 @@ export { getJWTClaims } from "./lib/decode";
 export { getLoginUrl, redirectToLogin } from "./lib/url";
 // ---- Handlers (ej: callback SSO) ----
 export { handlers as ssoHandlers } from "./services/handlers";
+export { createSSOMiddleware, buildMiddlewareConfig } from "./lib/middleware";
 // parseRedirectUrl, cookies y crypto permanecen internos (no exportados) para reducir superficie pública.
 // ---- Nota ----
 // Si necesitas ampliar la API vuelve a exportar desde aquí para mantener consistencia.
