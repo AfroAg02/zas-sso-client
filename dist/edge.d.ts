@@ -1,4 +1,4 @@
-export { getRedirectUri, initSSO, SSO } from "./init-config";
+export { getRedirectUri, getregisterCallbackUri, initSSO, SSO, } from "./init-config";
 export { getLoginUrl, redirectToLogin } from "./lib/url";
 export { getJWTClaims } from "./lib/decode";
 export { checkPermission, fetchMyPermissions, } from "./permissions-control/server";

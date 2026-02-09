@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { checkPermission, fetchMyPermissions } from "./server";
+import { checkPermission, fetchMyPermissions, } from "./server";
 /**
  * usePermissions
  * Usa la server function fetchMyPermissions (session interna) para traer los permisos del usuario.
