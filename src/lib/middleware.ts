@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCookiesSession } from "../services/server-actions";
+import { getConfig } from "../init-config";
+import { processSession } from "../services/session-logic";
+import { encrypt } from "./crypto";
+import { getSessionCookieOptions } from "./cookies";
 import { SSOInitOptions } from "../types";
 import { getLoginUrl } from "./url";
-
-
-
 
 /** Determina si un pathname está dentro de alguno de los prefijos protegidos. */
 function isProtected(pathname: string, protectedRoutes: string[] | null) {
@@ -39,7 +39,7 @@ export function buildMiddlewareConfig(protectedRoutes?: string[]) {
 export function createSSOMiddleware(options?: SSOInitOptions) {
   const protectedRoutes = options?.protectedRoutes?.length
     ? options?.protectedRoutes
-    : null; 
+    : null;
 
   return async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
@@ -50,23 +50,46 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
     }
 
     // Leer sesión (cifrada) y validar que tenga usuario + tokens
-    let hasSession = false;
-    try {
-      const session = await getCookiesSession();
-      hasSession = Boolean(
-        session &&
-          session.user &&
-          session.tokens?.accessToken &&
-          session.tokens?.refreshToken
-      );
-    } catch {
-      hasSession = false;
+    const cookieName = getConfig().COOKIE_SESSION_NAME;
+    const encryptedCookie = req.cookies.get(cookieName)?.value;
+
+    // Procesar: desencriptar, comprobar exp, refrescar si hace falta
+    const { session, refreshed } = await processSession(encryptedCookie);
+
+    const hasSession = Boolean(
+      session &&
+      session.user &&
+      session.tokens?.accessToken &&
+      session.tokens?.refreshToken,
+    );
+
+    if (hasSession) {
+      const res = NextResponse.next();
+      // IMPORTANTE: Si hubo refresh, inyectar la cookie nueva en la RESPONSE
+      if (refreshed && session) {
+        try {
+          const encrypted = await encrypt(JSON.stringify(session));
+          const opts = getSessionCookieOptions();
+
+          res.cookies.set({
+            name: opts.name,
+            value: encrypted,
+            httpOnly: opts.httpOnly,
+            secure: opts.secure,
+            path: opts.path,
+            sameSite: opts.sameSite,
+            maxAge: opts.maxAge,
+          });
+          console.log(
+            "[Middleware] 🍪 Cookie refrescada e inyectada en response",
+          );
+        } catch (e) {
+          console.error("[Middleware] Error seteando cookie refrescada", e);
+        }
+      }
+      return res;
     }
 
-    if (hasSession) return NextResponse.next();
-
-
-    
     const loginUrl = new URL(getLoginUrl());
     loginUrl.searchParams.set("callbackUrl", req.url);
     return NextResponse.redirect(loginUrl);

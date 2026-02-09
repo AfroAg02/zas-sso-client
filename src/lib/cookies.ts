@@ -7,15 +7,20 @@ import { getConfig } from "../init-config";
 export async function setSessionCookies(data: SessionData) {
   const c = await cookies();
   const encryptedData = await encrypt(JSON.stringify(data));
-  const name = getConfig().COOKIE_SESSION_NAME;
-  const age = getConfig().MAX_COOKIES_AGE;
-  c.set(name, encryptedData, {
+  const options = getSessionCookieOptions();
+  c.set(options.name, encryptedData, options);
+}
+
+export function getSessionCookieOptions() {
+  const config = getConfig();
+  return {
+    name: config.COOKIE_SESSION_NAME,
+    maxAge: config.MAX_COOKIES_AGE,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: age,
+    sameSite: "lax" as const,
     path: "/",
-  });
+  };
 }
 
 export async function readCookies() {

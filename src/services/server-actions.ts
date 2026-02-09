@@ -6,7 +6,7 @@ import { readCookies, setSessionCookies, clearSessionCookies } from "../lib/cook
 import { decrypt } from "../lib/crypto";
 import { SessionData, Tokens, User } from "../types";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
-import { getJWTClaims } from "../edge"; 
+import { processSession } from "./session-logic";
 // --- Configuración de Logs ---
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";
@@ -122,31 +122,7 @@ const safeSetCookies = async (data: SessionData) => {
   }
 };
 
-/**
- * Realiza el refresh contra tu API backend.
- */
-export const refreshTokens = async (refreshToken: string) => {
-  console.log(
-    FgYellow + "[refreshTokens] 🔄 Refrescando tokens en backend..." + Reset,
-  );
-  const { refresh } = getEndpoints();
-
-  try {
-    const response = await fetch(refresh, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-      cache: "no-store",
-    });
-
-    if (!response.ok) return { success: false };
-    const tokens: Tokens = await response.json();
-    return { success: true, tokens };
-  } catch (error) {
-    console.error(FgRed + "[refreshTokens] Error fatal:" + Reset, error);
-    return { success: false };
-  }
-};
+export { refreshTokens } from "./session-logic";
 
 /**
  * Función principal para obtener la sesión.
@@ -154,60 +130,37 @@ export const refreshTokens = async (refreshToken: string) => {
  */
 export const getCookiesSession = async (): Promise<SessionData> => {
   const encryptedSession = await readCookies();
-  if (!encryptedSession)
-    return { user: null, tokens: null, shouldClear: false };
 
-  try {
-    const decryptedData = await decrypt(encryptedSession);
-    const session = JSON.parse(decryptedData) as SessionData;
+  // Usamos lógica compartida
+  const result = await processSession(encryptedSession);
 
-    if (!session?.tokens?.accessToken) {
-      return { user: null, tokens: null, shouldClear: true };
-    }
-
-    const claims = getJWTClaims(session.tokens.accessToken);
-    const now = new Date();
-    const isExpired =
-      !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
-
-    if (isExpired) {
-      console.log(
-        FgCyan + "[getCookiesSession] ⚠️ Token expirado detectado." + Reset,
-      );
-
-      const res = await refreshTokens(session.tokens.refreshToken);
-
-      if (res.success && res.tokens) {
-        const newSession = {
-          ...session,
-          tokens: res.tokens,
-          shouldClear: false,
-        };
-
-        // Intentamos guardar, pero si falla (por estar en render),
-        // al menos devolvemos la sesión nueva para este request.
-        await safeSetCookies(newSession);
-
-        console.log(
-          FgGreen +
-            "[getCookiesSession] ✅ Sesión actualizada (Memoria)" +
-            Reset,
-        );
-        return newSession;
-      }
-
-      console.log(FgRed + "[getCookiesSession] ❌ Refresh fallido." + Reset);
-      return { user: null, tokens: null, shouldClear: true };
-    }
-
-    return session;
-  } catch (error) {
-    console.error(
-      FgRed + "[getCookiesSession] Error decodificando sesión:" + Reset,
-      error,
+  if (result.refreshed) {
+    console.log(
+      FgGreen +
+        "[getCookiesSession] 🔄 Sesión refrescada, intentando persistir..." +
+        Reset,
     );
-    return { user: null, tokens: null, shouldClear: true };
+
+    // Intentamos guardar mediante API call si estamos en Server Component,
+    // o esto funcionará si estamos en Server Action.
+    const saved = await safeSetCookies(result.session);
+
+    if (saved) {
+      console.log(
+        FgGreen +
+          "[getCookiesSession] ✅ Persistencia OK (API/Actions)." +
+          Reset,
+      );
+    } else {
+      console.log(
+        FgYellow +
+          "[getCookiesSession] ⚠️ Persistencia en espera (Render Phase). El cliente debe sincronizar." +
+          Reset,
+      );
+    }
   }
+
+  return result.session;
 };
 
 /**
