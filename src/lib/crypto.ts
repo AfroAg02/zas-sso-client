@@ -1,4 +1,5 @@
 import { CompactEncrypt, base64url, compactDecrypt } from "jose";
+import { getConfig } from "../init-config";
 
 const SALT_LENGTH = 16; // bytes
 const ITERATIONS = 100_000;
@@ -6,8 +7,8 @@ const ENC = "A256GCM"; // 256-bit AES-GCM
 const ALG = "dir"; // direct symmetric key
 
 function getSecret(): string {
-  const secret = process.env.ENCRYPTION_SECRET;
-  if (!secret) throw new Error("ENCRYPTION_SECRET env var is required");
+  const secret = getConfig().ENCRYPTION_SECRET;
+  if (!secret) throw new Error("ENCRYPTION_SECRET is required (env var or initSSO)");
   return secret;
 }
 
