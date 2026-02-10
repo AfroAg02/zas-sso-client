@@ -5,17 +5,22 @@ export type Tokens = {
 export interface Email {
     address: string;
     isVerified: boolean;
+    active: boolean;
 }
 export interface Phone {
     countryId: number;
     number: string;
     isVerified: boolean;
+    country: {
+        phoneNumberCode: string;
+    };
+    active: boolean;
 }
 export interface BaseUser {
     id: number;
     name: string;
     emails: Email[];
-    phones: Phone[];
+    phoneNumbers: Phone[];
     photoUrl: string;
     sessionId?: string;
 }

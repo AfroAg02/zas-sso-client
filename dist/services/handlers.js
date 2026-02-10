@@ -3,6 +3,7 @@ import { getRedirectUri, getAppUrl } from "../init-config";
 import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
 import { clearSessionCookies, setSessionCookies } from "../lib/cookies";
+import { FgGreen, FgRed, Reset } from "./session-logic";
 // Orígenes permitidos (puedes ampliar)
 function jsonError(message, status, origin, extra) {
     const res = NextResponse.json({ ok: false, error: message, ...extra }, { status });
@@ -41,7 +42,11 @@ export async function GET(request) {
         return jsonError("Missing accessToken", 400, origin);
     if (!refreshToken)
         return jsonError("Missing refreshToken", 400, origin);
-    const result = await authenticateWithTokens({ accessToken, refreshToken }, { onError: (e) => console.error("[callback] authenticate error", e) });
+    // console.log(FgMagenta + "[GET]  Entrando a la Api Route..." + Reset);
+    const result = await authenticateWithTokens({ accessToken, refreshToken }, {
+        onError: (e) => console.log(FgRed + "[GET]  Error autenticando" + Reset + e),
+        onSuccess: () => console.log(FgGreen + "[GET]  Autenticación exitosa" + Reset),
+    });
     if (result.error || !result.data) {
         return jsonError("Invalid credentials or user fetch failed", result.status || 401, origin);
     }

@@ -2,18 +2,26 @@
 import { cookies } from "next/headers";
 import { encrypt } from "./crypto";
 import { getConfig } from "../init-config";
+import { FgMagenta, Reset } from "../services/session-logic";
 export async function setSessionCookies(data) {
+    console.log(FgMagenta +
+        "[setSessionCookies]" +
+        Reset);
     const c = await cookies();
     const encryptedData = await encrypt(JSON.stringify(data));
-    const name = getConfig().COOKIE_SESSION_NAME;
-    const age = getConfig().MAX_COOKIES_AGE;
-    c.set(name, encryptedData, {
+    const options = await getSessionCookieOptions();
+    c.set(options.name, encryptedData, options);
+}
+export async function getSessionCookieOptions() {
+    const config = getConfig();
+    return {
+        name: config.COOKIE_SESSION_NAME,
+        maxAge: config.MAX_COOKIES_AGE,
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: age,
         path: "/",
-    });
+    };
 }
 export async function readCookies() {
     const c = await cookies();

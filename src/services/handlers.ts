@@ -4,6 +4,7 @@ import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta rea
 import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
 import { SessionData } from "../types";
 import { clearSessionCookies, setSessionCookies } from "../lib/cookies";
+import { FgGreen, FgMagenta, FgRed, Reset } from "./session-logic";
 
 // Orígenes permitidos (puedes ampliar)
 
@@ -52,10 +53,15 @@ export async function GET(request: Request) {
 
   if (!accessToken) return jsonError("Missing accessToken", 400, origin);
   if (!refreshToken) return jsonError("Missing refreshToken", 400, origin);
-
+  // console.log(FgMagenta + "[GET]  Entrando a la Api Route..." + Reset);
   const result = await authenticateWithTokens(
     { accessToken, refreshToken },
-    { onError: (e: any) => console.error("[callback] authenticate error", e) },
+    {
+      onError: (e: any) =>
+        console.log(FgRed + "[GET]  Error autenticando" + Reset + e),
+      onSuccess: () =>
+        console.log(FgGreen + "[GET]  Autenticación exitosa" + Reset),
+    },
   );
 
   if (result.error || !result.data) {

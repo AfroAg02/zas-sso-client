@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConfig } from "../init-config";
-import { processSession } from "../services/session-logic";
+import { FgCyan, FgMagenta, processSession, Reset } from "../services/session-logic";
 import { encrypt } from "./crypto";
 import { getSessionCookieOptions } from "./cookies";
 import { SSOInitOptions } from "../types";
@@ -48,7 +48,9 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
     if (!isProtected(pathname, protectedRoutes)) {
       return NextResponse.next();
     }
-
+    // console.log(FgCyan + "[middleware]  Entrando al middleware..." + Reset);
+    // console.log(FgMagenta + "[middleware]  Search Params " + req.nextUrl.searchParams + Reset);
+    // console.log(FgCyan + "[middleware]  URL completa " + req.nextUrl);
     // Leer sesión (cifrada) y validar que tenga usuario + tokens
     const cookieName = getConfig().COOKIE_SESSION_NAME;
     const encryptedCookie = req.cookies.get(cookieName)?.value;
@@ -69,7 +71,7 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
       if (refreshed && session) {
         try {
           const encrypted = await encrypt(JSON.stringify(session));
-          const opts = getSessionCookieOptions();
+          const opts = await getSessionCookieOptions();
 
           res.cookies.set({
             name: opts.name,

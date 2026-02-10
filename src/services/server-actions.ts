@@ -1,13 +1,15 @@
 "use server";
 
-import { ApiResponse } from "../types/fetch/api";
-import { getEndpoints, getAppUrl } from "../init-config";
-import { readCookies, setSessionCookies, clearSessionCookies } from "../lib/cookies";
-import { decrypt } from "../lib/crypto";
-import { SessionData, Tokens, User } from "../types";
+import { getAppUrl, getEndpoints } from "../init-config";
 import { buildApiResponseAsync, handleApiServerError } from "../lib/api";
-import { processSession } from "./session-logic";
-// --- Configuración de Logs ---
+import {
+  clearSessionCookies,
+  readCookies,
+  setSessionCookies,
+} from "../lib/cookies";
+import { SessionData, Tokens, User } from "../types";
+import { ApiResponse } from "../types/fetch/api";
+import { FgMagenta, processSession } from "./session-logic";
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";
 const FgGreen = "\x1b[32m";
@@ -23,15 +25,48 @@ export const persistUserSessionInCookies = async (
   session: SessionData,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ) => {
+  // console.log(
+  //   FgMagenta +
+  //     "[persistUserSessionInCookies]  Entrando a persistUserSessionInCookies..." +
+  //     Reset,
+  // );
+
   try {
     // Solo guardamos tokens y lo necesario para mantener la sesión ligera
-    const data: SessionData = {
+    const sessionData: SessionData = {
       tokens: session.tokens as Tokens,
-      user: session.user, // Mantenemos el usuario si viene incluido
+      user: session.user
+        ? {
+            id: session.user?.id,
+            name: session.user?.name,
+            emails: (session.user?.emails ?? [])
+              .map((e) => ({
+                address: e.address,
+                isVerified: e.isVerified,
+                active: e.active,
+              }))
+              .filter((e) => e.active),
+            photoUrl: session.user?.photoUrl,
+            phoneNumbers: (session.user?.phoneNumbers ?? [])
+              .map((p) => ({
+                number: p.number,
+                isVerified: p.isVerified,
+                country: p.country,
+                countryId: p.countryId,
+                active: p.active,
+              }))
+              .filter((e) => e.active),
+          }
+        : null, // Mantenemos el usuario si viene incluido
       shouldClear: false,
     };
-
-    await setSessionCookies(data);
+    // console.log(
+    //   FgCyan +
+    //     "[persistUserSessionInCookies]" +
+    //     JSON.stringify(sessionData) +
+    //     Reset,
+    // );
+    await setSessionCookies(sessionData);
     callbacks?.onSuccess?.();
   } catch (error) {
     console.error(
@@ -72,9 +107,28 @@ export const authenticateWithTokens = async (
   credentials: Tokens,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ): Promise<ApiResponse<User | null>> => {
+  // console.log(
+  //   FgMagenta +
+  //     "[authenticateWithTokens]  Entrando a authenticateWithTokens..." +
+  //     Reset,
+  // );
+  // console.log(
+  //   FgCyan +
+  //     "[authenticateWithTokens]  credentials." +
+  //     JSON.stringify(credentials) +
+  //     Reset,
+  // );
   try {
     const userResponse = await fetchUser(credentials.accessToken);
-    if (!userResponse.data) return userResponse;
+    if (!userResponse.data) {
+      console.log(
+        FgRed +
+          "[authenticateWithTokens]  No se obtuvo usuario válido." +
+          Reset,
+      );
+
+      return userResponse;
+    }
 
     await persistUserSessionInCookies({
       user: userResponse.data,
@@ -122,8 +176,6 @@ const safeSetCookies = async (data: SessionData) => {
   }
 };
 
-export { refreshTokens } from "./session-logic";
-
 /**
  * Función principal para obtener la sesión.
  * Soporta refresco en caliente durante el renderizado.
@@ -170,10 +222,13 @@ export const fetchUser = async (
   accessToken: string,
 ): Promise<ApiResponse<User>> => {
   const { me } = getEndpoints();
+  // console.log(FgMagenta + "[fetchUser]  Entrando a fetchUser..." + Reset);
   try {
     const response = await fetch(me, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    // console.log(FgCyan + "[fetchUser]  Respuesta del me" + response.ok + Reset);
+
     if (!response.ok) return handleApiServerError(response);
     return buildApiResponseAsync<User>(response);
   } catch (error) {

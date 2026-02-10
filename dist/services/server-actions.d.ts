@@ -1,5 +1,5 @@
-import { ApiResponse } from "../types/fetch/api";
 import { SessionData, Tokens, User } from "../types";
+import { ApiResponse } from "../types/fetch/api";
 /**
  * Almacena de forma segura la sesión del usuario en las cookies.
  * @param session Objeto con los tokens y datos del usuario.
@@ -23,16 +23,6 @@ export declare const authenticateWithTokens: (credentials: Tokens, callbacks?: {
     onSuccess?: () => void;
     onError?: (error: unknown) => void;
 }) => Promise<ApiResponse<User | null>>;
-/**
- * Realiza el refresh contra tu API backend.
- */
-export declare const refreshTokens: (refreshToken: string) => Promise<{
-    success: boolean;
-    tokens?: undefined;
-} | {
-    success: boolean;
-    tokens: Tokens;
-}>;
 /**
  * Función principal para obtener la sesión.
  * Soporta refresco en caliente durante el renderizado.

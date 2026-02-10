@@ -4,12 +4,12 @@ import { getJWTClaims } from "../lib/decode";
 import { SessionData, Tokens } from "../types";
 
 // --- Logging Colors ---
-const Reset = "\x1b[0m";
-const FgRed = "\x1b[31m";
-const FgGreen = "\x1b[32m";
-const FgYellow = "\x1b[33m";
-const FgCyan = "\x1b[36m";
-const FgMagenta = "\x1b[35m";
+export const Reset = "\x1b[0m";
+export const FgRed = "\x1b[31m";
+export const FgGreen = "\x1b[32m";
+export const FgYellow = "\x1b[33m";
+export const FgCyan = "\x1b[36m";
+export const FgMagenta = "\x1b[35m";
 
 /**
  * Realiza el refresh contra tu API backend.
@@ -85,11 +85,13 @@ export async function processSession(
 
     const claims = getJWTClaims(session.tokens.accessToken);
     const now = new Date();
-    // Margen de seguridad (ej: 10 segundos antes)
-    const expiresAt = claims?.expiresAt ? new Date(claims.expiresAt) : null;
 
     // Si no hay expiracion, asumimos valido o inválido? Asumimos valido, pero JWT suele tener exp.
-     const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+    const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
+    const timeToExpire = claims?.expiresAt ? claims.expiresAt.getTime() - now.getTime() : 0;
+    console.log(
+      FgYellow + `[processSession] ⏱️ Token expira en ${Math.floor(timeToExpire / 60000)}m` + Reset,
+    );
 
     if (isExpired) {
       console.log(
