@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConfig } from "../init-config";
-import { FgCyan, FgMagenta, processSession, Reset } from "../services/session-logic";
+
 import { encrypt } from "./crypto";
 import { getSessionCookieOptions } from "./cookies";
 import { SSOInitOptions } from "../types";
 import { getLoginUrl } from "./url";
+import { processSession } from "../services/session-logic";
 
+// --- Logging Colors ---
+ const Reset = "\x1b[0m";
+ const FgRed = "\x1b[31m";
+ const FgGreen = "\x1b[32m";
+ const FgYellow = "\x1b[33m";
+ const FgCyan = "\x1b[36m";
+ const FgMagenta = "\x1b[35m";
 /** Determina si un pathname está dentro de alguno de los prefijos protegidos. */
 function isProtected(pathname: string, protectedRoutes: string[] | null) {
   if (!protectedRoutes) return true; // sin lista => todo protegido
@@ -44,30 +52,45 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
   return async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
 
-    // Si no necesita auth, continuar.
     if (!isProtected(pathname, protectedRoutes)) {
       return NextResponse.next();
     }
-    // console.log(FgCyan + "[middleware]  Entrando al middleware..." + Reset);
-    // console.log(FgMagenta + "[middleware]  Search Params " + req.nextUrl.searchParams + Reset);
-    // console.log(FgCyan + "[middleware]  URL completa " + req.nextUrl);
-    // Leer sesión (cifrada) y validar que tenga usuario + tokens
+
+    console.log(FgCyan + "[middleware] URL completa " + req.nextUrl);
+    
     const cookieName = getConfig().COOKIE_SESSION_NAME;
     const encryptedCookie = req.cookies.get(cookieName)?.value;
 
-    // Procesar: desencriptar, comprobar exp, refrescar si hace falta
+    console.log(FgCyan + "[middleware] 🔄 Leyendo cookies de sesión por middleware..." + Reset);
     const { session, refreshed } = await processSession(encryptedCookie);
 
     const hasSession = Boolean(
       session &&
       session.user &&
       session.tokens?.accessToken &&
-      session.tokens?.refreshToken,
+      session.tokens?.refreshToken
     );
 
     if (hasSession) {
-      const res = NextResponse.next();
-      // IMPORTANTE: Si hubo refresh, inyectar la cookie nueva en la RESPONSE
+      // --- CAMBIO 1: Crear Headers de la petición para inyectar datos ---
+      const requestHeaders = new Headers(req.headers);
+      
+      // Seguridad: Borramos cualquier intento de inyectar este header desde afuera
+      requestHeaders.delete("x-zas-access-token");
+
+      // Si hubo refresh, o simplemente para que el Server Component no tenga que
+      // desencriptar la cookie de nuevo, inyectamos el token en el header.
+      if (session?.tokens?.accessToken) {
+        requestHeaders.set("x-zas-access-token", session.tokens.accessToken);
+      }
+
+      // --- CAMBIO 2: Pasar los nuevos headers a NextResponse.next() ---
+      const res = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+
       if (refreshed && session) {
         try {
           const encrypted = await encrypt(JSON.stringify(session));
@@ -82,9 +105,7 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
             sameSite: opts.sameSite,
             maxAge: opts.maxAge,
           });
-          console.log(
-            "[Middleware] 🍪 Cookie refrescada e inyectada en response",
-          );
+          console.log("[Middleware] 🍪 Cookie refrescada e inyectada en response");
         } catch (e) {
           console.error("[Middleware] Error seteando cookie refrescada", e);
         }

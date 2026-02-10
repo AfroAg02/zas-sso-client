@@ -23,10 +23,6 @@ export declare const authenticateWithTokens: (credentials: Tokens, callbacks?: {
     onSuccess?: () => void;
     onError?: (error: unknown) => void;
 }) => Promise<ApiResponse<User | null>>;
-/**
- * Función principal para obtener la sesión.
- * Soporta refresco en caliente durante el renderizado.
- */
 export declare const getCookiesSession: () => Promise<SessionData>;
 /**
  * Obtiene el usuario. Se suele usar después de getCookiesSession.

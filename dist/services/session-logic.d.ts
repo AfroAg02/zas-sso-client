@@ -25,7 +25,7 @@ export declare const refreshTokens: (refreshToken: string) => Promise<{
  * Retorna el objeto de sesión (actualizado o no),
  * y un flag 'refreshed' para indicar si hubo cambios.
  */
-export declare function processSession(encryptedSession: string | undefined): Promise<{
+export declare function processSession(encryptedSession: string | undefined, forcedAccessToken?: string): Promise<{
     session: SessionData;
     refreshed: boolean;
     error?: any;

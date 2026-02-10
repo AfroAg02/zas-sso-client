@@ -9,7 +9,7 @@ import {
 } from "../lib/cookies";
 import { SessionData, Tokens, User } from "../types";
 import { ApiResponse } from "../types/fetch/api";
-import { FgMagenta, processSession } from "./session-logic";
+import { processSession } from "../services/session-logic";;
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";
 const FgGreen = "\x1b[32m";
@@ -180,40 +180,47 @@ const safeSetCookies = async (data: SessionData) => {
  * Función principal para obtener la sesión.
  * Soporta refresco en caliente durante el renderizado.
  */
-export const getCookiesSession = async (): Promise<SessionData> => {
-  const encryptedSession = await readCookies();
+import { cache } from 'react';
+import { headers } from 'next/headers';
+// Importa tus utilidades actuales
+// import { readCookies, processSession, safeSetCookies, ... } from './auth';
 
-  // Usamos lógica compartida
+export const getCookiesSession = cache(async (): Promise<SessionData> => {
+  const headersList = await headers();
+  
+  // 1. PRIORIDAD: Intentar leer el token inyectado por el Middleware
+  // Esto evita desencriptar y evita el SEGUNDO refresh (el que da 401)
+  const tokenFromMiddleware = headersList.get('x-zas-access-token');
+
+  if (tokenFromMiddleware) {
+    /* Si el middleware ya nos dio el token, devolvemos una sesión mínima 
+       o una sesión parcial. Si necesitas el objeto 'user' completo, 
+       puedes inyectar también un header 'x-zas-user' en el middleware 
+       o desencriptar aquí solo si es estrictamente necesario.
+    */
+    console.log(FgGreen + "[getCookiesSession] ✅ Usando token fresco del Middleware" + Reset);
+    
+    // Si necesitas reconstruir la sesión completa (user + tokens)
+    // podrías desencriptar la cookie una vez, pero YA TIENES el accessToken válido.
+    const encryptedSession = await readCookies();
+    const result = await processSession(encryptedSession, tokenFromMiddleware); 
+    return result.session;
+  }
+
+  // 2. FALLBACK: Si no hay header (ej. rutas no protegidas o fallos), lógica original
+  console.log(FgYellow + "[getCookiesSession] 🔄 No hay header del middleware, disparo manual..." + Reset);
+  
+  const encryptedSession = await readCookies();
   const result = await processSession(encryptedSession);
 
   if (result.refreshed) {
-    console.log(
-      FgGreen +
-        "[getCookiesSession] 🔄 Sesión refrescada, intentando persistir..." +
-        Reset,
-    );
-
-    // Intentamos guardar mediante API call si estamos en Server Component,
-    // o esto funcionará si estamos en Server Action.
+    console.log(FgGreen + "[getCookiesSession] 🔄 Sesión refrescada en render..." + Reset);
     const saved = await safeSetCookies(result.session);
-
-    if (saved) {
-      console.log(
-        FgGreen +
-          "[getCookiesSession] ✅ Persistencia OK (API/Actions)." +
-          Reset,
-      );
-    } else {
-      console.log(
-        FgYellow +
-          "[getCookiesSession] ⚠️ Persistencia en espera (Render Phase). El cliente debe sincronizar." +
-          Reset,
-      );
-    }
+    // ... tu lógica de logs de persistencia
   }
 
   return result.session;
-};
+});
 
 /**
  * Obtiene el usuario. Se suele usar después de getCookiesSession.

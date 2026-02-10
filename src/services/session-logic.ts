@@ -57,6 +57,7 @@ export const refreshTokens = async (refreshToken: string) => {
  */
 export async function processSession(
   encryptedSession: string | undefined,
+  forcedAccessToken?: string, // <--- NUEVO: Token ya refrescado por el Middleware
 ): Promise<{
   session: SessionData;
   refreshed: boolean;
@@ -76,6 +77,15 @@ export async function processSession(
     const decryptedData = await decrypt(encryptedSession);
     let session = JSON.parse(decryptedData) as SessionData;
 
+    // --- CAMBIO CLAVE: Sincronización con el Middleware ---
+    if (forcedAccessToken && session.tokens) {
+      console.log(FgGreen + "[processSession] 🚀 Sincronizando sesión con token del Middleware" + Reset);
+      session.tokens.accessToken = forcedAccessToken;
+      // Retornamos refreshed: false porque el refresh ocurrió en el Middleware, 
+      // no aquí, así evitamos intentar guardar cookies en fase de render.
+      return { session, refreshed: false };
+    }
+
     if (!session?.tokens?.accessToken) {
       return {
         session: { ...emptySession, shouldClear: true },
@@ -86,34 +96,24 @@ export async function processSession(
     const claims = getJWTClaims(session.tokens.accessToken);
     const now = new Date();
 
-    // Si no hay expiracion, asumimos valido o inválido? Asumimos valido, pero JWT suele tener exp.
     const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
     const timeToExpire = claims?.expiresAt ? claims.expiresAt.getTime() - now.getTime() : 0;
+    
     console.log(
       FgYellow + `[processSession] ⏱️ Token expira en ${Math.floor(timeToExpire / 60000)}m` + Reset,
     );
 
     if (isExpired) {
-      console.log(
-        FgCyan + "[processSession] ⚠️ Token expirado detectado." + Reset,
-      );
+      // Esta parte solo se ejecutará si el Middleware NO capturó la expiración
+      console.log(FgCyan + "[processSession] ⚠️ Token expirado detectado." + Reset);
 
       const res = await refreshTokens(session.tokens.refreshToken);
 
       if (res.success && res.tokens) {
-        // Actualizamos sesión
-        session = {
-          ...session,
-          tokens: res.tokens,
-          shouldClear: false,
-        };
+        session = { ...session, tokens: res.tokens, shouldClear: false };
         return { session, refreshed: true };
       } else {
-        console.log(
-          FgRed +
-            "[processSession] ❌ Refresh fallido. Sesión invalidada." +
-            Reset,
-        );
+        console.log(FgRed + "[processSession] ❌ Refresh fallido. Sesión invalidada." + Reset);
         return {
           session: { ...emptySession, shouldClear: true },
           refreshed: false,
@@ -121,14 +121,9 @@ export async function processSession(
       }
     }
 
-    // Sesión válida sin cambios
     return { session, refreshed: false };
   } catch (error) {
-    console.error(
-      FgRed + "[processSession] Error procesando sesión:" + Reset,
-      error,
-    );
-    // Si falla desencriptar o parsear, limpiamos cookies
+    console.error(FgRed + "[processSession] Error procesando sesión:" + Reset, error);
     return {
       session: { ...emptySession, shouldClear: true },
       refreshed: false,
