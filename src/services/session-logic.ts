@@ -89,7 +89,7 @@ export async function processSession(
     const expiresAt = claims?.expiresAt ? new Date(claims.expiresAt) : null;
 
     // Si no hay expiracion, asumimos valido o inválido? Asumimos valido, pero JWT suele tener exp.
-    const isExpired = expiresAt ? now.getTime() >= expiresAt.getTime() : false;
+     const isExpired = !claims?.expiresAt || now.getTime() >= claims.expiresAt.getTime();
 
     if (isExpired) {
       console.log(
