@@ -5,9 +5,6 @@ import { refreshSession, getCookiesSession } from "./server-actions";
 
 // Colores ANSI para logs de depuración
 const Reset = "\x1b[0m";
-const FgCyan = "\x1b[36m";
-const FgYellow = "\x1b[33m";
-const FgGreen = "\x1b[32m";
 const FgRed = "\x1b[31m";
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -32,7 +29,7 @@ export async function getValidToken(
       if (result.error) {
         console.error(
           FgRed +
-            `[refresh-coordinator Diego] ❌ refreshSession devolvió error (status=${result.status})` +
+            `[refresh-coordinator] ❌ refreshSession devolvió error (status=${result.status})` +
             Reset,
         );
         return null;
@@ -46,7 +43,7 @@ export async function getValidToken(
     } catch (error) {
       console.error(
         FgRed +
-          "[refresh-coordinator Diego] ❌ Error inesperado durante el refresh" +
+          "[refresh-coordinator] ❌ Error inesperado durante el refresh" +
           Reset,
         error,
       );

@@ -9,6 +9,7 @@ export async function setSessionCookies(data: SessionData) {
   const encryptedData = await encrypt(JSON.stringify(data));
   const options = await getSessionCookieOptions();
   c.set(options.name, encryptedData, options);
+  c.set('updatedDate', new Date().toISOString());
 }
 
 export async function getSessionCookieOptions() {

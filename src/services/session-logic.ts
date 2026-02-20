@@ -43,22 +43,17 @@ export async function processSession(
     }
 
     // Log del tiempo restante de vigencia del accessToken
-    try {
-      const claims = getJWTClaims(session.tokens.accessToken);
-      if (claims?.expiresAt) {
-        const now = new Date();
-        const diffMs = claims.expiresAt.getTime() - now.getTime();
-        // Minutos restantes reales (puede ser negativo si ya expiró)
-        const minutesLeft = diffMs / 60000;
-
-        const minutesLeftRounded = Math.round(minutesLeft * 100) / 100; // 2 decimales
-        const expiresAtIso = claims.expiresAt.toISOString();
-        // En producción no logueamos este dato para evitar ruido; si se necesita,
-        // puede reactivarse temporalmente durante debugging.
-      }
-    } catch {
-      // Si falla el decode, simplemente no logueamos el tiempo restante
-    }
+    // try {
+    //   const claims = getJWTClaims(session.tokens.accessToken);
+    //   if (claims?.expiresAt) {
+    //     const now = new Date();
+    //     const diffMs = claims.expiresAt.getTime() - now.getTime();
+    //     const minutesLeft = diffMs / 60000;
+    //     const minutesLeftRounded = Math.round(minutesLeft * 100) / 100;
+    //     const expiresAtIso = claims.expiresAt.toISOString();
+    //   }
+    // } catch {
+    // }
 
     return { session: { ...session, shouldClear: false }, refreshed: false };
   } catch (error) {
