@@ -9,12 +9,7 @@ import {
 } from "../lib/cookies";
 import { SessionData, Tokens, User } from "../types";
 import { ApiResponse } from "../types/fetch/api";
-import { processSession } from "../services/session-logic";;
-const Reset = "\x1b[0m";
-const FgRed = "\x1b[31m";
-const FgGreen = "\x1b[32m";
-const FgYellow = "\x1b[33m";
-const FgCyan = "\x1b[36m";
+import { processSession } from "../services/session-logic";
 
 /**
  * Almacena de forma segura la sesión del usuario en las cookies.
@@ -25,12 +20,6 @@ export const persistUserSessionInCookies = async (
   session: SessionData,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ) => {
-  // console.log(
-  //   FgMagenta +
-  //     "[persistUserSessionInCookies]  Entrando a persistUserSessionInCookies..." +
-  //     Reset,
-  // );
-
   try {
     // Solo guardamos tokens y lo necesario para mantener la sesión ligera
     const sessionData: SessionData = {
@@ -60,21 +49,9 @@ export const persistUserSessionInCookies = async (
         : null, // Mantenemos el usuario si viene incluido
       shouldClear: false,
     };
-    // console.log(
-    //   FgCyan +
-    //     "[persistUserSessionInCookies]" +
-    //     JSON.stringify(sessionData) +
-    //     Reset,
-    // );
     await setSessionCookies(sessionData);
     callbacks?.onSuccess?.();
   } catch (error) {
-    console.error(
-      FgRed +
-        "[persistUserSessionInCookies] Error persistiendo sesión:" +
-        Reset,
-      error,
-    );
     callbacks?.onError?.(error);
     throw error;
   }
@@ -91,10 +68,6 @@ export const deleteCookiesSession = async (callbacks?: {
     await clearSessionCookies();
     callbacks?.onSuccess?.();
   } catch (error) {
-    console.error(
-      FgRed + "[deleteCookiesSession] Error al eliminar cookies:" + Reset,
-      error,
-    );
     callbacks?.onError?.(error);
     throw error;
   }
@@ -107,26 +80,9 @@ export const authenticateWithTokens = async (
   credentials: Tokens,
   callbacks?: { onSuccess?: () => void; onError?: (error: unknown) => void },
 ): Promise<ApiResponse<User | null>> => {
-  // console.log(
-  //   FgMagenta +
-  //     "[authenticateWithTokens]  Entrando a authenticateWithTokens..." +
-  //     Reset,
-  // );
-  // console.log(
-  //   FgCyan +
-  //     "[authenticateWithTokens]  credentials." +
-  //     JSON.stringify(credentials) +
-  //     Reset,
-  // );
   try {
     const userResponse = await fetchUser(credentials.accessToken);
     if (!userResponse.data) {
-      console.log(
-        FgRed +
-          "[authenticateWithTokens]  No se obtuvo usuario válido." +
-          Reset,
-      );
-
       return userResponse;
     }
 
@@ -138,12 +94,6 @@ export const authenticateWithTokens = async (
     callbacks?.onSuccess?.();
     return { data: userResponse.data, status: 200, error: false };
   } catch (error) {
-    console.error(
-      FgRed +
-        "[authenticateWithTokens] Error en autenticación inicial:" +
-        Reset,
-      error,
-    );
     callbacks?.onError?.(error);
     return { data: null, status: 500, error: true };
   }
@@ -166,12 +116,6 @@ const safeSetCookies = async (data: SessionData) => {
     });
     return true;
   } catch (e) {
-    // Si falla, es porque estamos en un Server Component Render
-    console.warn(
-      FgYellow +
-        "[Session] No se pudieron persistir cookies en el render. Se usarán tokens en memoria." +
-        Reset,
-    );
     return false;
   }
 };
@@ -180,45 +124,11 @@ const safeSetCookies = async (data: SessionData) => {
  * Función principal para obtener la sesión.
  * Soporta refresco en caliente durante el renderizado.
  */
-import { cache } from 'react';
-import { headers } from 'next/headers';
-// Importa tus utilidades actuales
-// import { readCookies, processSession, safeSetCookies, ... } from './auth';
+import { cache } from "react";
 
 export const getCookiesSession = cache(async (): Promise<SessionData> => {
-  const headersList = await headers();
-  
-  // 1. PRIORIDAD: Intentar leer el token inyectado por el Middleware
-  // Esto evita desencriptar y evita el SEGUNDO refresh (el que da 401)
-  const tokenFromMiddleware = headersList.get('x-zas-access-token');
-
-  if (tokenFromMiddleware) {
-    /* Si el middleware ya nos dio el token, devolvemos una sesión mínima 
-       o una sesión parcial. Si necesitas el objeto 'user' completo, 
-       puedes inyectar también un header 'x-zas-user' en el middleware 
-       o desencriptar aquí solo si es estrictamente necesario.
-    */
-    console.log(FgGreen + "[getCookiesSession] ✅ Usando token fresco del Middleware" + Reset);
-    
-    // Si necesitas reconstruir la sesión completa (user + tokens)
-    // podrías desencriptar la cookie una vez, pero YA TIENES el accessToken válido.
-    const encryptedSession = await readCookies();
-    const result = await processSession(encryptedSession, tokenFromMiddleware); 
-    return result.session;
-  }
-
-  // 2. FALLBACK: Si no hay header (ej. rutas no protegidas o fallos), lógica original
-  console.log(FgYellow + "[getCookiesSession] 🔄 No hay header del middleware, disparo manual..." + Reset);
-  
   const encryptedSession = await readCookies();
   const result = await processSession(encryptedSession);
-
-  if (result.refreshed) {
-    console.log(FgGreen + "[getCookiesSession] 🔄 Sesión refrescada en render..." + Reset);
-    const saved = await safeSetCookies(result.session);
-    // ... tu lógica de logs de persistencia
-  }
-
   return result.session;
 });
 
@@ -229,16 +139,75 @@ export const fetchUser = async (
   accessToken: string,
 ): Promise<ApiResponse<User>> => {
   const { me } = getEndpoints();
-  // console.log(FgMagenta + "[fetchUser]  Entrando a fetchUser..." + Reset);
   try {
     const response = await fetch(me, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    // console.log(FgCyan + "[fetchUser]  Respuesta del me" + response.ok + Reset);
-
     if (!response.ok) return handleApiServerError(response);
     return buildApiResponseAsync<User>(response);
   } catch (error) {
     return { data: null as any, status: 500, error: true };
+  }
+};
+
+/**
+ * Servicio explícito para refrescar la sesión usando un refresh token.
+ *
+ * - Llama al endpoint de refresh (o a una URL alterna si se provee).
+ * - Usa authenticateWithTokens para obtener el usuario y persistir la sesión en cookies.
+ * - Expone logs internos solo dentro de esta función para depuración.
+ */
+export const refreshSession = async (
+  refreshToken: string,
+  options?: { refreshUrl?: string },
+): Promise<ApiResponse<User | null>> => {
+  // Logs locales a esta función para depuración
+  const Reset = "\x1b[0m";
+  const FgGreen = "\x1b[32m";
+  const FgRed = "\x1b[31m";
+
+  const { refresh } = getEndpoints();
+  const endpoint = options?.refreshUrl ?? refresh;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      let body: string | undefined;
+      try {
+        body = await response.text();
+      } catch {
+        body = undefined;
+      }
+
+      console.error(
+        FgRed +
+          `[refreshSession] ❌ Error de backend status=${
+            response.status
+          } body=${body ? body.slice(0, 500) : "<sin body>"}` +
+          Reset,
+      );
+
+      return { data: null, status: response.status, error: true };
+    }
+
+    const tokens: Tokens = await response.json();
+
+    // Reutilizamos authenticateWithTokens para obtener el usuario y persistir sesión
+    return authenticateWithTokens(tokens);
+  } catch (error) {
+    console.error(
+      FgRed +
+        "[refreshSession] ❌ Error inesperado intentando refrescar la sesión" +
+        Reset,
+      error,
+    );
+
+    return { data: null, status: 500, error: true };
   }
 };

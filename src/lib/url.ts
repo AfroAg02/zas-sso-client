@@ -11,11 +11,10 @@ export const getLoginUrl = () => {
   url.searchParams.set("state", state);
   const redirectUri = `${getAppUrl()}/api/sso/callback`;
   const registerCallbackUri = getregisterCallbackUri();
-  console.log("Register Callback URI:", registerCallbackUri);
   if (registerCallbackUri && registerCallbackUri !== "/") {
     url.searchParams.set(
       "register_callback_uri",
-      `${getAppUrl()}${registerCallbackUri}`
+      `${getAppUrl()}${registerCallbackUri}`,
     );
   }
   url.searchParams.set("redirect_uri", redirectUri);

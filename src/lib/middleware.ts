@@ -1,52 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConfig } from "../init-config";
-
-import { encrypt } from "./crypto";
-import { getSessionCookieOptions } from "./cookies";
-import { SSOInitOptions } from "../types";
-import { getLoginUrl } from "./url";
 import { processSession } from "../services/session-logic";
+import { SSOInitOptions } from "../types";
+import { getSessionCookieOptions } from "./cookies";
+import { encrypt } from "./crypto";
+import { getLoginUrl } from "./url";
 
-// --- Logging Colors ---
- const Reset = "\x1b[0m";
- const FgRed = "\x1b[31m";
- const FgGreen = "\x1b[32m";
- const FgYellow = "\x1b[33m";
- const FgCyan = "\x1b[36m";
- const FgMagenta = "\x1b[35m";
-/** Determina si un pathname está dentro de alguno de los prefijos protegidos. */
+/**
+ * Determina si un pathname está dentro de alguno de los prefijos protegidos.
+ *
+ * Además, cualquier ruta que contenga "dashboard" se considera protegida.
+ */
 function isProtected(pathname: string, protectedRoutes: string[] | null) {
-  if (!protectedRoutes) return true; // sin lista => todo protegido
-  return protectedRoutes.some((prefix) => {
+  if (pathname.includes("dashboard")) return true;
+
+  const routes =
+    protectedRoutes && protectedRoutes.length
+      ? protectedRoutes
+      : ["/dashboard"]; // valor por defecto
+
+  return routes.some((prefix) => {
     if (!prefix) return false;
     if (prefix === "/") return true;
-    return pathname === prefix || pathname.startsWith(prefix + "/");
+    if (pathname === prefix) return true;
+    return pathname.startsWith(prefix + "/");
   });
 }
 
-/** Construye el array de matchers para exportarlo en `config`. */
+/**
+ * Determina si el pathname apunta a un asset estático de Next.
+ *
+ * Se expone por compatibilidad, aunque ya no se usa para refresco.
+ */
+function isStaticAsset(pathname: string) {
+  if (pathname.startsWith("/_next/")) return true;
+  if (pathname.startsWith("/static/")) return true;
+  return false;
+}
+
+/**
+ * Construye el array de matchers para exportarlo en `config`.
+ *
+ * - Si se pasan rutas protegidas, genera matchers del tipo `/ruta/:path*`.
+ * - Si no, protege todo excepto assets de Next.
+ */
 export function buildMiddlewareConfig(protectedRoutes?: string[]) {
-  if (protectedRoutes && protectedRoutes.length) {
-    const unique = Array.from(new Set(protectedRoutes));
-    const matcher = unique.map((r) => {
-      const cleaned = r.endsWith("/") ? r.slice(0, -1) : r; // quitar slash final
-      return cleaned === "/" ? "/:path*" : `${cleaned}/:path*`;
-    });
-    return { matcher } as const;
+  if (!protectedRoutes || !protectedRoutes.length) {
+    // Proteger todo excepto rutas internas de Next y estáticos
+    return { matcher: ["/((?!_next/|static/).*)"] } as const;
   }
-  // Sin rutas => proteger todo (excepto assets de Next, opcional). Para simplificar todo.
-  return { matcher: ["/(.*)"] } as const;
+
+  const unique = Array.from(new Set(protectedRoutes));
+
+  const matcher = unique.map((route) => {
+    if (!route || route === "/") return "/((?!_next/|static/).*)";
+    // Asegurarse de que empieza con "/"
+    const normalized = route.startsWith("/") ? route : `/${route}`;
+    return `${normalized}/:path*`;
+  });
+
+  return { matcher } as const;
 }
 
 /**
  * Crea un middleware de SSO que:
- *  - Verifica si la ruta requiere auth (según prefijos). Si no, deja pasar.
+ *  - Verifica si la ruta requiere auth (según prefijos / heurística).
+ *  - Si no requiere auth, deja pasar.
  *  - Si requiere auth y NO hay sesión => redirige a login con callbackUrl.
- *  - Si requiere auth y hay sesión => continúa.
+ *  - No realiza ningún refresco automático de tokens.
  */
 export function createSSOMiddleware(options?: SSOInitOptions) {
   const protectedRoutes = options?.protectedRoutes?.length
-    ? options?.protectedRoutes
+    ? options.protectedRoutes
     : null;
 
   return async function middleware(req: NextRequest) {
@@ -56,68 +81,43 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
       return NextResponse.next();
     }
 
-    console.log(FgCyan + "[middleware] URL completa " + req.nextUrl);
-    
     const cookieName = getConfig().COOKIE_SESSION_NAME;
     const encryptedCookie = req.cookies.get(cookieName)?.value;
 
-    console.log(FgCyan + "[middleware] 🔄 Leyendo cookies de sesión por middleware..." + Reset);
     const { session, refreshed } = await processSession(encryptedCookie);
 
-    const hasSession = Boolean(
-      session &&
-      session.user &&
-      session.tokens?.accessToken &&
-      session.tokens?.refreshToken
-    );
+    const hasSession = Boolean(session.tokens?.accessToken);
 
-    if (hasSession) {
-      // --- CAMBIO 1: Crear Headers de la petición para inyectar datos ---
-      const requestHeaders = new Headers(req.headers);
-      
-      // Seguridad: Borramos cualquier intento de inyectar este header desde afuera
-      requestHeaders.delete("x-zas-access-token");
-
-      // Si hubo refresh, o simplemente para que el Server Component no tenga que
-      // desencriptar la cookie de nuevo, inyectamos el token en el header.
-      if (session?.tokens?.accessToken) {
-        requestHeaders.set("x-zas-access-token", session.tokens.accessToken);
-      }
-
-      // --- CAMBIO 2: Pasar los nuevos headers a NextResponse.next() ---
-      const res = NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-
-      if (refreshed && session) {
-        try {
-          const encrypted = await encrypt(JSON.stringify(session));
-          const opts = await getSessionCookieOptions();
-
-          res.cookies.set({
-            name: opts.name,
-            value: encrypted,
-            httpOnly: opts.httpOnly,
-            secure: opts.secure,
-            path: opts.path,
-            sameSite: opts.sameSite,
-            maxAge: opts.maxAge,
-          });
-          console.log("[Middleware] 🍪 Cookie refrescada e inyectada en response");
-        } catch (e) {
-          console.error("[Middleware] Error seteando cookie refrescada", e);
-        }
-      }
-      return res;
+    if (!hasSession) {
+      const loginUrl = new URL(getLoginUrl());
+      loginUrl.searchParams.set("callbackUrl", req.url);
+      return NextResponse.redirect(loginUrl);
     }
 
-    const loginUrl = new URL(getLoginUrl());
-    loginUrl.searchParams.set("callbackUrl", req.url);
-    return NextResponse.redirect(loginUrl);
+    const res = NextResponse.next();
+
+    // processSession ya no refresca, pero mantenemos la firma por compatibilidad.
+    if (refreshed && session) {
+      try {
+        const encrypted = await encrypt(JSON.stringify(session));
+        const opts = await getSessionCookieOptions();
+        res.cookies.set({
+          name: opts.name,
+          value: encrypted,
+          httpOnly: opts.httpOnly,
+          secure: opts.secure,
+          path: opts.path,
+          sameSite: opts.sameSite,
+          maxAge: opts.maxAge,
+        });
+      } catch {
+        // Ignorar errores al intentar reescribir la cookie en middleware
+      }
+    }
+
+    return res;
   };
 }
 
-// Export util por compatibilidad con el archivo previo (opcional)
-export const _internal = { isProtected, buildMiddlewareConfig };
+// Expone utilidades internas para pruebas/uso avanzado
+export const _internal = { isProtected, isStaticAsset, buildMiddlewareConfig };

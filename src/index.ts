@@ -40,6 +40,9 @@ export {
   getCookiesSession as getServerSession,
 } from "./services/server-actions";
 
+// Coordinador de refresh público (para manejar 401 y refrescos únicos)
+export { getValidToken as getServerValidToken } from "./services/refresh-coordinator";
+
 // ---- Permisos (server) ----
 export {
   checkPermission,
@@ -57,7 +60,6 @@ export type * from "./types";
 export { handlers as ssoHandlers } from "./services/handlers";
 
 export { createSSOMiddleware, buildMiddlewareConfig } from "./lib/middleware";
-
 
 // parseRedirectUrl, cookies y crypto permanecen internos (no exportados) para reducir superficie pública.
 
