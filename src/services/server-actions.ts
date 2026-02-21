@@ -186,11 +186,17 @@ export const refreshSession = async (
 
       console.error(
         FgRed +
-          `[refreshSession] ❌ Error de backend status=${
+          `[refreshSession] ❌ Fallo al refrescar=${
             response.status
           } body=${body ? body.slice(0, 500) : "<sin body>"}` +
           Reset,
       );
+      console.error(
+        FgRed +
+          `[refreshSession] ❌ Peticion a url=${endpoint} con el token=${refreshToken} a las ${new Date().toISOString()}` +
+          Reset,
+      );
+  
 
       return { data: null, status: response.status, error: true };
     }
