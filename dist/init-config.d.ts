@@ -4,6 +4,7 @@ export declare function getConfig(): {
     NEXT_PUBLIC_SSO_URL: string | undefined;
     REDIRECT_URI: string;
     REGISTER_REDIRECT_URI: string | undefined;
+    ERROR_REDIRECT_PATH: string | undefined;
     MAX_COOKIES_AGE: number;
     COOKIE_SESSION_NAME: string;
     ENDPOINTS: {
@@ -17,6 +18,7 @@ export declare function getConfig(): {
 export declare function getAppUrl(): string | undefined;
 export declare function getSsoUrl(): string | undefined;
 export declare function getRedirectUri(): string;
+export declare function getErrorRedirectUrl(): string | undefined;
 export declare function getregisterCallbackUri(): string | undefined;
 export declare function getEndpoints(): {
     login: string;
@@ -27,9 +29,9 @@ export declare function getDebug(): boolean;
 export declare function initSSO(options: SSOInitOptions): {
     readonly middleware: (req: import("next/server").NextRequest) => Promise<import("next/server").NextResponse<unknown>>;
     readonly config: {
-        readonly matcher: string[];
+        readonly matcher: readonly ["/((?!_next/|static/).*)"];
     } | {
-        readonly matcher: readonly ["/(.*)"];
+        readonly matcher: string[];
     };
     readonly handlers: {
         GET: typeof import("./services/handlers").GET;

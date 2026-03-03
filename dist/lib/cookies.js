@@ -2,15 +2,12 @@
 import { cookies } from "next/headers";
 import { encrypt } from "./crypto";
 import { getConfig } from "../init-config";
-import { FgMagenta, Reset } from "../services/session-logic";
 export async function setSessionCookies(data) {
-    console.log(FgMagenta +
-        "[setSessionCookies]" +
-        Reset);
     const c = await cookies();
     const encryptedData = await encrypt(JSON.stringify(data));
     const options = await getSessionCookieOptions();
     c.set(options.name, encryptedData, options);
+    c.set('updatedDate', new Date().toISOString());
 }
 export async function getSessionCookieOptions() {
     const config = getConfig();

@@ -19,11 +19,14 @@ function parseBooleanEnv(val) {
 const apiBase = normalizeUrl(process.env.NEXT_PUBLIC_API_URL || "https://api.zasdistributor.com");
 const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
 const debugEnv = parseBooleanEnv(process.env.SSO_DEBUG);
+// Ruta (path) relativa para redirección en caso de error de callback SSO
+const errorRedirectPathEnv = process.env.NEXT_PUBLIC_SSO_ERROR_REDIRECT_PATH?.trim();
 const config = {
     NEXT_PUBLIC_APP_URL: normalizeUrl(process.env.NEXT_PUBLIC_APP_URL),
     NEXT_PUBLIC_SSO_URL: normalizeUrl(process.env.NEXT_PUBLIC_SSO_URL ?? "https://login.zasdistributor.com/login"),
     REDIRECT_URI: "/",
     REGISTER_REDIRECT_URI: normalizeUrl(process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/"),
+    ERROR_REDIRECT_PATH: errorRedirectPathEnv,
     MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
     COOKIE_SESSION_NAME: "session",
     ENDPOINTS: {
@@ -49,10 +52,18 @@ export function getSsoUrl() {
 export function getRedirectUri() {
     return config.REDIRECT_URI;
 }
+// Construye la URL completa de redirección de error si está configurada
+export function getErrorRedirectUrl() {
+    const appUrl = getAppUrl();
+    const path = config.ERROR_REDIRECT_PATH;
+    if (!appUrl || !path)
+        return undefined;
+    // Evita dobles slashes al concatenar
+    const base = normalizeUrl(appUrl) || "";
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `${base}${cleanPath}`;
+}
 export function getregisterCallbackUri() {
-    if (config.DEBUG) {
-        console.log("Register Callback URI: on GET CONFIG", config.REGISTER_REDIRECT_URI);
-    }
     return config.REGISTER_REDIRECT_URI;
 }
 export function getEndpoints() {
@@ -63,7 +74,6 @@ export function getDebug() {
 }
 // Inicializador para sobrescribir valores
 export function initSSO(options) {
-    console.log("Initializing SSO with options:", options);
     if (options.appUrl)
         config.NEXT_PUBLIC_APP_URL = normalizeUrl(options.appUrl);
     if (options.ssoUrl)

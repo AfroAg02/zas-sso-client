@@ -32,6 +32,10 @@ export type SessionData = {
     user: User | null;
     tokens: Tokens | null;
     shouldClear?: boolean;
+    tokenExpiry?: {
+        accessTokenExpiresIn?: number | null;
+        refreshTokenExpiresIn?: number | null;
+    };
 };
 export type Credentials = {
     email?: string;

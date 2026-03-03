@@ -129,7 +129,56 @@ import { cache } from "react";
 export const getCookiesSession = cache(async (): Promise<SessionData> => {
   const encryptedSession = await readCookies();
   const result = await processSession(encryptedSession);
-  return result.session;
+  const session = result.session;
+
+  // Helper local: calcula segundos restantes de un JWT 'exp'
+  function getTokenRemainingSeconds(token?: string | null): number | null {
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null; // no es JWT
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    try {
+      const payloadJson = Buffer.from(padded, "base64").toString("utf8");
+      const payload = JSON.parse(payloadJson);
+      if (!payload.exp) return null;
+      const msLeft = payload.exp * 1000 - Date.now();
+      return Math.max(0, Math.floor(msLeft / 1000));
+    } catch {
+      return null;
+    }
+  }
+
+  const accessTokenRemaining = getTokenRemainingSeconds(
+    session.tokens?.accessToken ?? null,
+  );
+  const refreshTokenRemaining = getTokenRemainingSeconds(
+    session.tokens?.refreshToken ?? null,
+  );
+
+  // Loguear en consola cada vez que se consulta la sesión, mostrando tiempo restante (con color)
+  try {
+    const Reset = "\x1b[0m";
+    const FgCyan = "\x1b[36m";
+    const FgYellow = "\x1b[33m";
+    const acc =
+      accessTokenRemaining != null ? `${accessTokenRemaining}s` : "n/a";
+    const ref =
+      refreshTokenRemaining != null ? `${refreshTokenRemaining}s` : "n/a";
+    console.log(
+      `${FgCyan}[getCookiesSession]${Reset} accessTokenExpiresIn=${FgYellow}${acc}${Reset} refreshTokenExpiresIn=${FgYellow}${ref}${Reset}`,
+    );
+  } catch {
+    // no bloquear por logging
+  }
+
+  return {
+    ...session,
+    tokenExpiry: {
+      accessTokenExpiresIn: accessTokenRemaining,
+      refreshTokenExpiresIn: refreshTokenRemaining,
+    },
+  };
 });
 
 /**
@@ -196,7 +245,6 @@ export const refreshSession = async (
           `[refreshSession] ❌ Peticion a url=${endpoint} con el token=${refreshToken} a las ${new Date().toISOString()}` +
           Reset,
       );
-  
 
       return { data: null, status: response.status, error: true };
     }

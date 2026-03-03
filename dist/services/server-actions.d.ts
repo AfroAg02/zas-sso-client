@@ -28,4 +28,14 @@ export declare const getCookiesSession: () => Promise<SessionData>;
  * Obtiene el usuario. Se suele usar después de getCookiesSession.
  */
 export declare const fetchUser: (accessToken: string) => Promise<ApiResponse<User>>;
+/**
+ * Servicio explícito para refrescar la sesión usando un refresh token.
+ *
+ * - Llama al endpoint de refresh (o a una URL alterna si se provee).
+ * - Usa authenticateWithTokens para obtener el usuario y persistir la sesión en cookies.
+ * - Expone logs internos solo dentro de esta función para depuración.
+ */
+export declare const refreshSession: (refreshToken: string, options?: {
+    refreshUrl?: string;
+}) => Promise<ApiResponse<User | null>>;
 //# sourceMappingURL=server-actions.d.ts.map

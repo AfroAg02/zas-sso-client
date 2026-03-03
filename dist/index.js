@@ -19,6 +19,8 @@ export { usePermissionCheck, usePermissions, } from "./permissions-control/hooks
 // ---- Server actions públicas ----
 // Exponemos únicamente sign out para limpiar la sesión. El resto queda interno.
 export { deleteCookiesSession as serverSignOut, getCookiesSession as getServerSession, } from "./services/server-actions";
+// Coordinador de refresh público (para manejar 401 y refrescos únicos)
+export { getValidToken as getServerValidToken } from "./services/refresh-coordinator";
 // ---- Permisos (server) ----
 export { checkPermission, fetchMyPermissions, } from "./permissions-control/server";
 // ---- Utils de navegación / login ----

@@ -8,6 +8,27 @@ import htmlError from "../utils/html-page-error";
 
 // Orígenes permitidos (puedes ampliar)
 
+/**
+ * Devuelve los segundos restantes hasta el `exp` de un JWT.
+ * Retorna `null` si el token no parece ser un JWT o no contiene `exp`.
+ */
+function getTokenRemainingSeconds(token?: string | null): number | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null; // no es JWT
+  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  try {
+    const payloadJson = Buffer.from(padded, "base64").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    if (!payload.exp) return null;
+    const msLeft = payload.exp * 1000 - Date.now();
+    return Math.max(0, Math.floor(msLeft / 1000));
+  } catch {
+    return null;
+  }
+}
+
 function jsonError(
   message: string,
   status: number,
@@ -47,6 +68,8 @@ export async function GET(request: Request) {
   // Parámetros esperados
   const accessToken = url.searchParams.get("accessToken");
   const refreshToken = url.searchParams.get("refreshToken");
+  // calcular tiempo restante si el accessToken es JWT
+  const accessTokenRemaining = getTokenRemainingSeconds(accessToken);
   // Unifica: usa "redirect" (o "redirectTo"). Aquí uso "redirect".
 
   // Helper local para aplicar la lógica de redirección de error o JSON
@@ -85,6 +108,12 @@ export async function GET(request: Request) {
   safeUrl.searchParams.delete("accessToken");
   safeUrl.searchParams.delete("refreshToken");
   safeUrl.searchParams.delete("state");
+  if (accessTokenRemaining != null) {
+    safeUrl.searchParams.set(
+      "accessTokenExpiresIn",
+      String(accessTokenRemaining),
+    );
+  }
   const safeRedirect = safeUrl.toString();
   const res = NextResponse.redirect(safeRedirect, { status: 302 });
   return res;

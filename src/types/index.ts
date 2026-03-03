@@ -7,7 +7,7 @@ export type Tokens = {
 export interface Email {
   address: string;
   isVerified: boolean;
-  active:boolean;
+  active: boolean;
 }
 export interface Phone {
   countryId: number;
@@ -15,7 +15,7 @@ export interface Phone {
   isVerified: boolean;
   country: {
     phoneNumberCode: string;
-  }
+  };
   active: boolean;
 }
 
@@ -38,6 +38,10 @@ export type SessionData = {
   user: User | null;
   tokens: Tokens | null;
   shouldClear?: boolean;
+  tokenExpiry?: {
+    accessTokenExpiresIn?: number | null;
+    refreshTokenExpiresIn?: number | null;
+  };
 };
 
 export type Credentials = {
