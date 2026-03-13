@@ -108,12 +108,7 @@ export async function GET(request: Request) {
   safeUrl.searchParams.delete("accessToken");
   safeUrl.searchParams.delete("refreshToken");
   safeUrl.searchParams.delete("state");
-  if (accessTokenRemaining != null) {
-    safeUrl.searchParams.set(
-      "accessTokenExpiresIn",
-      String(accessTokenRemaining),
-    );
-  }
+
   const safeRedirect = safeUrl.toString();
   const res = NextResponse.redirect(safeRedirect, { status: 302 });
   return res;
