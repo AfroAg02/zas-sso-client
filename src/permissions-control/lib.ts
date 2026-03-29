@@ -1,14 +1,9 @@
-const permissionsBaseEnv = process.env.NEXT_PUBLIC_PERMISSIONS_ENDPOINT?.trim();
-const defaultPermissionsBase =
-  "https://api.zasdistributor.com/api/me/permissions";
-const permissionsBase = (
-  permissionsBaseEnv && permissionsBaseEnv.length > 0
-    ? permissionsBaseEnv
-    : defaultPermissionsBase
-).replace(/\/+$/, "");
+import { getEndpoints } from "../init-config";
 
 export const ENDPOINTS = {
-  permissions: permissionsBase,
+  get permissions() {
+    return getEndpoints().permissions!;
+  },
   check: (code: string) =>
-    `${permissionsBase}/${encodeURIComponent(code)}/check`,
+    `${getEndpoints().permissions}/${encodeURIComponent(code)}/check`,
 };

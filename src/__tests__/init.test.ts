@@ -47,4 +47,17 @@ describe('initSSO', () => {
     expect(config.NEXT_PUBLIC_APP_URL).toBe('http://localhost:3000');
     expect(config.NEXT_PUBLIC_SSO_URL).toBe('https://login.example.com');
   });
+
+  it('should initialize with encryptionSecret and permissions endpoint', () => {
+    initSSO({
+      encryptionSecret: 'my-super-secret-key-32-chars-long-!!!',
+      endpoints: {
+        permissions: 'https://api.example.com/permissions',
+      }
+    });
+
+    const config = getConfig();
+    expect(config.ENCRYPTION_SECRET).toBe('my-super-secret-key-32-chars-long-!!!');
+    expect(config.ENDPOINTS.permissions).toBe('https://api.example.com/permissions');
+  });
 });
