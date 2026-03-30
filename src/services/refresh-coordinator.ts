@@ -1,7 +1,7 @@
 // Coordinador para orquestar un único refresh concurrente por token
 // usando el servicio refreshSession que ya persiste la sesión en cookies.
 
-import { refreshSession, getCookiesSession } from "./server-actions";
+import { refreshSession } from "./server-actions";
 
 // Colores ANSI para logs de depuración
 const Reset = "\x1b[0m";
@@ -132,20 +132,21 @@ export async function getValidToken(
         return null;
       }
 
-      // refreshSession ya guardó la sesión en cookies; leemos el nuevo accessToken
-      const session = await getCookiesSession();
+      // Usamos los tokens devueltos directamente por refreshSession
+      // (no getCookiesSession, que está cacheada por react.cache y devolvería datos stale)
+      const newAccessToken = result.tokens?.accessToken ?? null;
 
-      // DEBUG: log session tokens masked and parsed
+      // DEBUG: log new tokens masked and parsed
       try {
         console.log(
-          `${FgGreen}[refresh-coordinator] getCookiesSession returned session present=${session ? "yes" : "no"}${Reset}`,
+          `${FgGreen}[refresh-coordinator] refreshSession returned tokens present=${result.tokens ? "yes" : "no"}${Reset}`,
         );
-        if (session?.tokens) {
+        if (result.tokens) {
           console.log(
-            `${FgGreen}[refresh-coordinator] new accessToken=${maskToken(session.tokens.accessToken)} refreshToken=${maskToken(session.tokens.refreshToken)}${Reset}`,
+            `${FgGreen}[refresh-coordinator] new accessToken=${maskToken(result.tokens.accessToken)} refreshToken=${maskToken(result.tokens.refreshToken)}${Reset}`,
           );
           const accessPayload = parseJwtPayload(
-            session.tokens.accessToken ?? null,
+            result.tokens.accessToken ?? null,
           );
           if (accessPayload?.exp) {
             console.log(
@@ -173,7 +174,7 @@ export async function getValidToken(
           Reset,
       );
 
-      return session.tokens?.accessToken ?? null;
+      return newAccessToken;
     } catch (error) {
       console.error(
         FgRed +

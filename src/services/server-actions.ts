@@ -209,7 +209,7 @@ export const fetchUser = async (
 export const refreshSession = async (
   refreshToken: string,
   options?: { refreshUrl?: string },
-): Promise<ApiResponse<User | null>> => {
+): Promise<ApiResponse<User | null> & { tokens?: Tokens }> => {
   // Logs locales a esta función para depuración
   const Reset = "\x1b[0m";
   const FgRed = "\x1b[31m";
@@ -252,7 +252,8 @@ export const refreshSession = async (
     const tokens: Tokens = await response.json();
 
     // Reutilizamos authenticateWithTokens para obtener el usuario y persistir sesión
-    return authenticateWithTokens(tokens);
+    const authResult = await authenticateWithTokens(tokens);
+    return { ...authResult, tokens };
   } catch (error) {
     console.error(
       FgRed +
