@@ -1,10 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConfig } from "../init-config";
+import { getConfig, getEndpoints } from "../init-config";
 import { processSession } from "../services/session-logic";
-import { SSOInitOptions } from "../types";
+import { SessionData, SSOInitOptions, Tokens } from "../types";
 import { getSessionCookieOptions } from "./cookies";
 import { encrypt } from "./crypto";
 import { getLoginUrl } from "./url";
+
+/**
+ * Calcula los segundos restantes hasta el `exp` de un JWT.
+ */
+function getTokenRemainingSeconds(token?: string | null): number | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  try {
+    const payloadJson = Buffer.from(padded, "base64").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    if (!payload.exp) return null;
+    const msLeft = payload.exp * 1000 - Date.now();
+    return Math.max(0, Math.floor(msLeft / 1000));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Llama al endpoint de refresh y devuelve los nuevos tokens, o null si falla.
+ */
+async function refreshTokens(refreshToken: string): Promise<Tokens | null> {
+  try {
+    const { refresh } = getEndpoints();
+    const response = await fetch(refresh, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const tokens: Tokens = await response.json();
+    if (!tokens.accessToken || !tokens.refreshToken) return null;
+    return tokens;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Construye un SessionData con los nuevos tokens y el usuario existente.
+ */
+function buildRefreshedSession(
+  oldSession: SessionData,
+  newTokens: Tokens,
+): SessionData {
+  return {
+    user: oldSession.user,
+    tokens: newTokens,
+    shouldClear: false,
+  };
+}
 
 /**
  * Determina si un pathname está dentro de alguno de los prefijos protegidos.
@@ -95,6 +150,43 @@ export function createSSOMiddleware(options?: SSOInitOptions) {
     }
 
     const res = NextResponse.next();
+
+    // Si el access token expiró (o está a punto) pero el refresh token sigue vigente,
+    // refrescamos aquí en middleware donde sí podemos escribir cookies en la respuesta.
+    const accessRemaining = getTokenRemainingSeconds(
+      session.tokens?.accessToken ?? null,
+    );
+    const refreshRemaining = getTokenRemainingSeconds(
+      session.tokens?.refreshToken ?? null,
+    );
+
+    if (
+      accessRemaining != null &&
+      accessRemaining <= 0 &&
+      refreshRemaining != null &&
+      refreshRemaining > 0 &&
+      session.tokens?.refreshToken
+    ) {
+      const newTokens = await refreshTokens(session.tokens.refreshToken);
+      if (newTokens) {
+        const refreshedSession = buildRefreshedSession(session, newTokens);
+        try {
+          const encrypted = await encrypt(JSON.stringify(refreshedSession));
+          const opts = await getSessionCookieOptions();
+          res.cookies.set({
+            name: opts.name,
+            value: encrypted,
+            httpOnly: opts.httpOnly,
+            secure: opts.secure,
+            path: opts.path,
+            sameSite: opts.sameSite,
+            maxAge: opts.maxAge,
+          });
+        } catch {
+          // Si falla la escritura de cookie, el render intentará refrescar en caliente
+        }
+      }
+    }
 
     // processSession ya no refresca, pero mantenemos la firma por compatibilidad.
     if (refreshed && session) {

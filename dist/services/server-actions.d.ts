@@ -37,5 +37,7 @@ export declare const fetchUser: (accessToken: string) => Promise<ApiResponse<Use
  */
 export declare const refreshSession: (refreshToken: string, options?: {
     refreshUrl?: string;
-}) => Promise<ApiResponse<User | null>>;
+}) => Promise<ApiResponse<User | null> & {
+    tokens?: Tokens;
+}>;
 //# sourceMappingURL=server-actions.d.ts.map

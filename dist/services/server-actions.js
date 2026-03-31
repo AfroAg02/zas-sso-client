@@ -207,7 +207,8 @@ export const refreshSession = async (refreshToken, options) => {
         }
         const tokens = await response.json();
         // Reutilizamos authenticateWithTokens para obtener el usuario y persistir sesión
-        return authenticateWithTokens(tokens);
+        const authResult = await authenticateWithTokens(tokens);
+        return { ...authResult, tokens };
     }
     catch (error) {
         console.error(FgRed +

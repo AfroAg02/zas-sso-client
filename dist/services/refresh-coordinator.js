@@ -1,6 +1,6 @@
 // Coordinador para orquestar un único refresh concurrente por token
 // usando el servicio refreshSession que ya persiste la sesión en cookies.
-import { refreshSession, getCookiesSession } from "./server-actions";
+import { refreshSession } from "./server-actions";
 // Colores ANSI para logs de depuración
 const Reset = "\x1b[0m";
 const FgRed = "\x1b[31m";
@@ -94,14 +94,15 @@ export async function getValidToken(currentRefreshToken) {
                 }
                 return null;
             }
-            // refreshSession ya guardó la sesión en cookies; leemos el nuevo accessToken
-            const session = await getCookiesSession();
-            // DEBUG: log session tokens masked and parsed
+            // Usamos los tokens devueltos directamente por refreshSession
+            // (no getCookiesSession, que está cacheada por react.cache y devolvería datos stale)
+            const newAccessToken = result.tokens?.accessToken ?? null;
+            // DEBUG: log new tokens masked and parsed
             try {
-                console.log(`${FgGreen}[refresh-coordinator] getCookiesSession returned session present=${session ? "yes" : "no"}${Reset}`);
-                if (session?.tokens) {
-                    console.log(`${FgGreen}[refresh-coordinator] new accessToken=${maskToken(session.tokens.accessToken)} refreshToken=${maskToken(session.tokens.refreshToken)}${Reset}`);
-                    const accessPayload = parseJwtPayload(session.tokens.accessToken ?? null);
+                console.log(`${FgGreen}[refresh-coordinator] refreshSession returned tokens present=${result.tokens ? "yes" : "no"}${Reset}`);
+                if (result.tokens) {
+                    console.log(`${FgGreen}[refresh-coordinator] new accessToken=${maskToken(result.tokens.accessToken)} refreshToken=${maskToken(result.tokens.refreshToken)}${Reset}`);
+                    const accessPayload = parseJwtPayload(result.tokens.accessToken ?? null);
                     if (accessPayload?.exp) {
                         console.log(`${FgGreen}[refresh-coordinator] accessToken exp: ${new Date(accessPayload.exp * 1000).toISOString()} (${accessPayload.exp})${Reset}`);
                     }
@@ -118,7 +119,7 @@ export async function getValidToken(currentRefreshToken) {
             console.log(FgGreen +
                 "[refresh-coordinator] ✅ Token refrescado correctamente" +
                 Reset);
-            return session.tokens?.accessToken ?? null;
+            return newAccessToken;
         }
         catch (error) {
             console.error(FgRed +
