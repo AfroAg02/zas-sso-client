@@ -213,17 +213,40 @@ export const refreshSession = async (
   // Logs locales a esta función para depuración
   const Reset = "\x1b[0m";
   const FgRed = "\x1b[31m";
+  const FgGreen = "\x1b[32m";
+  const FgCyan = "\x1b[36m";
+  const FgGray = "\x1b[90m";
+  const TAG = "[refreshSession]";
 
   const { refresh } = getEndpoints();
   const endpoint = options?.refreshUrl ?? refresh;
 
+  console.log(`${FgCyan}${TAG} ─── refreshSession() START ───${Reset}`);
+  console.log(`${FgGreen}${TAG} Endpoint: ${endpoint}${Reset}`);
+  console.log(
+    `${FgGreen}${TAG} refreshToken: ${refreshToken ? `${refreshToken.slice(0, 6)}...${refreshToken.slice(-4)}` : "none"}${Reset}`,
+  );
+  console.log(
+    `${FgGray}${TAG} All configured endpoints: ${JSON.stringify(getEndpoints())}${Reset}`,
+  );
+  console.log(`${FgGray}${TAG} Timestamp: ${new Date().toISOString()}${Reset}`);
+
+  const startTime = Date.now();
+
   try {
+    console.log(`${FgGreen}${TAG} 📡 Sending POST to ${endpoint}...${Reset}`);
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
       cache: "no-store",
     });
+
+    const elapsed = Date.now() - startTime;
+    console.log(
+      `${FgGreen}${TAG} Response received in ${elapsed}ms — status=${response.status} ok=${response.ok}${Reset}`,
+    );
 
     if (!response.ok) {
       let body: string | undefined;
@@ -233,33 +256,73 @@ export const refreshSession = async (
         body = undefined;
       }
 
+      console.error(`${FgRed}${TAG} ❌ Refresh FAILED${Reset}`);
       console.error(
-        FgRed +
-          `[refreshSession] ❌ Fallo al refrescar=${
-            response.status
-          } body=${body ? body.slice(0, 500) : "<sin body>"}` +
-          Reset,
+        `${FgRed}${TAG}   └─ Status: ${response.status} ${response.statusText}${Reset}`,
+      );
+      console.error(`${FgRed}${TAG}   └─ Endpoint: ${endpoint}${Reset}`);
+      console.error(
+        `${FgRed}${TAG}   └─ Response body: ${body ? body.slice(0, 500) : "<empty>"}${Reset}`,
+      );
+      console.error(`${FgRed}${TAG}   └─ Elapsed: ${elapsed}ms${Reset}`);
+      console.error(
+        `${FgRed}${TAG}   └─ Timestamp: ${new Date().toISOString()}${Reset}`,
       );
       console.error(
-        FgRed +
-          `[refreshSession] ❌ Peticion a url=${endpoint} con el token=${refreshToken} a las ${new Date().toISOString()}` +
-          Reset,
+        `${FgRed}${TAG}   └─ Token used: ${refreshToken.slice(0, 6)}...${refreshToken.slice(-4)}${Reset}`,
+      );
+      console.log(
+        `${FgCyan}${TAG} ─── refreshSession() END (error) ───${Reset}`,
       );
 
       return { data: null, status: response.status, error: true };
     }
 
     const tokens: Tokens = await response.json();
+    console.log(
+      `${FgGreen}${TAG} ✅ Refresh endpoint returned new tokens${Reset}`,
+    );
+    console.log(
+      `${FgGreen}${TAG}   └─ new accessToken: ${tokens.accessToken ? `${tokens.accessToken.slice(0, 6)}...${tokens.accessToken.slice(-4)}` : "MISSING"}${Reset}`,
+    );
+    console.log(
+      `${FgGreen}${TAG}   └─ new refreshToken: ${tokens.refreshToken ? `${tokens.refreshToken.slice(0, 6)}...${tokens.refreshToken.slice(-4)}` : "MISSING"}${Reset}`,
+    );
 
     // Reutilizamos authenticateWithTokens para obtener el usuario y persistir sesión
+    console.log(
+      `${FgGreen}${TAG} 📡 Calling authenticateWithTokens() to fetch user & persist cookies...${Reset}`,
+    );
     const authResult = await authenticateWithTokens(tokens);
+    const authElapsed = Date.now() - startTime;
+    console.log(
+      `${FgGreen}${TAG} authenticateWithTokens completed — status=${authResult.status} error=${authResult.error ? "yes" : "no"} total=${authElapsed}ms${Reset}`,
+    );
+    console.log(
+      `${FgCyan}${TAG} ─── refreshSession() END (success) ───${Reset}`,
+    );
+
     return { ...authResult, tokens };
   } catch (error) {
+    const elapsed = Date.now() - startTime;
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errCause =
+      error && typeof error === "object" && "cause" in error
+        ? String((error as any).cause)
+        : "n/a";
+
+    console.error(`${FgRed}${TAG} ❌ EXCEPTION after ${elapsed}ms${Reset}`);
+    console.error(`${FgRed}${TAG}   └─ Message: ${errMsg}${Reset}`);
+    console.error(`${FgRed}${TAG}   └─ Cause: ${errCause}${Reset}`);
+    console.error(`${FgRed}${TAG}   └─ Endpoint: ${endpoint}${Reset}`);
     console.error(
-      FgRed +
-        "[refreshSession] ❌ Error inesperado intentando refrescar la sesión" +
-        Reset,
-      error,
+      `${FgRed}${TAG}   └─ Token: ${refreshToken ? `${refreshToken.slice(0, 6)}...${refreshToken.slice(-4)}` : "none"}${Reset}`,
+    );
+    if (error instanceof Error && error.stack) {
+      console.error(`${FgGray}${TAG}   └─ Stack: ${error.stack}${Reset}`);
+    }
+    console.log(
+      `${FgCyan}${TAG} ─── refreshSession() END (exception) ───${Reset}`,
     );
 
     return { data: null, status: 500, error: true };

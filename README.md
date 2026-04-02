@@ -177,35 +177,96 @@ export async function GET() {
 		 | (1) Accede a ruta protegida
 		 v
 [ Next.js Middleware ] --¿Sesión válida?--> Sí -> continúa
-		 | No
+		 | No                     |
+		 v                        | accessToken expirado?
+	Redirige a SSO (login)       | Sí + refreshToken vigente
+		 |                        v
+		 |              [ Refresh preventivo en middleware ]
+		 |              POST /auth/refresh → nuevos tokens
+		 |              → escribe cookie cifrada en response
+		 |                        |
+		 +------------------------+
+		 |
+		 | (2) Usuario se autentica en SSO externo
 		 v
-	Redirige a SSO (login) --------------+
-																				|
-																				| (2) Usuario se autentica en SSO externo
-																				v
-														SSO redirige a /api/sso/callback?accessToken&refreshToken
-																				|
-																				v
-													[ Handler callback guarda sesión (cookies cifradas) ]
-																				|
-																				v
-													Redirección segura a redirectUri
-																				|
-																				v
-													[ Cliente monta <SSOProvider><Refresh/> ]
-																				|
-																				| (3) Hook useAuth lee cookies vía server action
-																				v
-															Tokens en memoria + refresh programado
+SSO redirige a /api/sso/callback?accessToken&refreshToken
+		 |
+		 v
+[ Handler callback guarda sesión (cookies cifradas) ]
+		 |
+		 v
+Redirección segura a redirectUri
+		 |
+		 v
+[ Cliente monta <SSOProvider> ]
+		 |
+		 | (3) Hook useAuth lee cookies vía server action
+		 v
+Tokens en memoria
+```
+
+### Flujo de Refresh de Tokens
+
+El refresco de tokens opera en **dos capas** con protección contra condiciones de carrera:
+
+#### Capa 1: Refresh preventivo (Middleware)
+
+Antes de que el SSR comience, el middleware detecta si el access token expiró y el refresh token sigue vigente. Si es así, llama al endpoint `/auth/refresh` y escribe la cookie actualizada en la respuesta.
+
+**Importante para apps con middleware encadenado:** cuando el middleware SSO refresca tokens, la app consumidora debe propagar las cookies del response SSO tanto al `req` (para que middlewares posteriores lean la cookie nueva) como al response final (para que el browser la reciba). Ejemplo:
+
+```ts
+// middlewares/sso.ts
+import { middleware } from "@/sso";
+
+export const withSSO: MiddlewareFactory = (next) => async (req, event) => {
+  const ssoRes = await middleware(req);
+  if (ssoRes.status !== 200) return ssoRes;
+
+  // Propagar cookies al request para middlewares/render posteriores
+  for (const cookie of ssoRes.cookies.getAll()) {
+    req.cookies.set(cookie.name, cookie.value);
+  }
+
+  const res = await next(req, event);
+
+  // Copiar cookies del SSO middleware a la respuesta final
+  for (const cookie of ssoRes.cookies.getAll()) {
+    res.cookies.set(cookie);
+  }
+
+  return res;
+};
+```
+
+#### Capa 2: Refresh reactivo (SSR / Server Actions)
+
+Si el middleware no pudo refrescar (ej: la cookie aún no se propagó), `nextAuthFetch` detecta un 401 y delega al **coordinador de refresh** (`getServerValidToken`):
+
+1. **Deduplicación**: Si hay 20 fetches concurrentes con 401, solo uno refresca. Los demás esperan la misma promesa.
+2. **Blacklist**: Si el refresh falla con 4xx, el token se marca como fallido para no reintentar en el mismo ciclo.
+3. **Cache de resultados**: Tras un refresh exitoso, el nuevo access token se cachea por 5 minutos mapeado al refresh token viejo. Así, si un nuevo render aún lee la cookie vieja, obtiene el token cacheado sin llamar al backend.
+
+```
+nextAuthFetch() detecta 401
+  └─→ getServerValidToken(refreshToken)
+       ├─ ¿Blacklisted? → null (no reintenta)
+       ├─ ¿Cache hit? → devuelve accessToken cacheado
+       ├─ ¿In-flight? → espera promesa existente
+       └─ Nuevo → refreshSession()
+            └─ POST /auth/refresh
+            └─ authenticateWithTokens() → persiste en cookies
+            └─ Cachea resultado (TTL 5min)
+            └─ Retorna nuevo accessToken
 ```
 
 Componentes clave:
 
-- Middleware: fuerza autenticación en rutas protegidas.
-- Cookies cifradas: almacenan user + tokens (encrypted JWE + PBKDF2).
-- Refresh hook: programa la renovación antes de expirar el access token.
-- Server actions: acceso a sesión y rotación de tokens.
-- Permisos: fetch y verificación granular.
+- **Middleware**: fuerza autenticación + refresh preventivo en rutas protegidas.
+- **Coordinador** (`refresh-coordinator.ts`): deduplicación, blacklist y cache de refreshes.
+- **Cookies cifradas**: almacenan user + tokens (encrypted JWE + PBKDF2).
+- **Server actions**: acceso a sesión y rotación de tokens.
+- **Permisos**: fetch y verificación granular.
 
 ---
 
@@ -241,7 +302,7 @@ Tipos: Tokens, SessionData, User, SSOInitOptions, etc.
 
 ## 10. Roadmap sugerido
 
-- (Opcional) Soporte de rotating refresh tokens.
+- ~~Soporte de rotating refresh tokens~~ ✅ Implementado (coordinador con cache + blacklist).
 - Integrar fallback de permisos cacheados.
 - Añadir modo "public routes" explícito sin middleware.
 
@@ -261,12 +322,15 @@ Tipos: Tokens, SessionData, User, SSOInitOptions, etc.
 
 ## 12. Troubleshooting
 
-| Problema           | Causa probable                                   | Solución                                                                                     |
-| ------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Loop redirecciones | redirectUri protegido sin sesión establecida     | Asegura que callback completa antes de proteger redirectUri o permite temporalmente esa ruta |
-| No refresca token  | exp ausente o reloj desfasado                    | Sincroniza hora servidor / valida claims del JWT                                             |
-| Error decrypt      | ENCRYPTION_SECRET distinto entre build y runtime | Unifica variables de entorno                                                                 |
-| Permisos 401       | accessToken expirado                             | Verifica que refresh endpoint responde 200 y formato tokens                                  |
+| Problema                                  | Causa probable                                                                | Solución                                                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Loop redirecciones                        | redirectUri protegido sin sesión establecida                                  | Asegura que callback completa antes de proteger redirectUri o permite temporalmente esa ruta                    |
+| No refresca token                         | exp ausente o reloj desfasado                                                 | Sincroniza hora servidor / valida claims del JWT                                                                |
+| Error decrypt                             | ENCRYPTION_SECRET distinto entre build y runtime                              | Unifica variables de entorno                                                                                    |
+| Permisos 401                              | accessToken expirado                                                          | Verifica que refresh endpoint responde 200 y formato tokens                                                     |
+| Múltiples 401 tras refresh exitoso        | Middleware encadenado descarta cookies del response SSO                       | Propaga cookies del SSO middleware al request **y** al response final (ver ejemplo en sección 7)                |
+| Refresh token ya rotado                   | El backend rota refresh tokens y la cookie aún tiene el viejo                 | El coordinador cachea el resultado por 5 min; si persiste, revisa que el middleware propague cookies            |
+| fetch failed / ECONNABORTED en middleware | El endpoint de refresh no es alcanzable desde el entorno de middleware (Edge) | Verifica que `NEXT_PUBLIC_REFRESH_ENDPOINT` apunte a una URL pública y que el middleware no bloquee la conexión |
 
 ---
 
