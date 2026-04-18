@@ -189,9 +189,7 @@ function normalizeUserResponse(raw: any): User {
   return {
     ...raw,
     name:
-      raw.name ||
-      `${raw.firstName || ""} ${raw.lastName || ""}`.trim() ||
-      "",
+      raw.name || `${raw.firstName || ""} ${raw.lastName || ""}`.trim() || "",
     photoUrl: raw.photoUrl ?? raw.profilePicturePath ?? null,
     emails: raw.emails ?? [],
     phoneNumbers: raw.phoneNumbers ?? [],

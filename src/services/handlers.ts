@@ -1,33 +1,10 @@
 import { NextResponse } from "next/server";
 import { getRedirectUri, getAppUrl, getErrorRedirectUrl } from "../init-config";
-import { parseRedirectUrl } from "../lib/parse-redirect-url"; // Ajusta ruta real
-import { authenticateWithTokens } from "./server-actions"; // Ajusta ruta real
+import { parseRedirectUrl } from "../lib/parse-redirect-url";
+import { authenticateWithTokens } from "./server-actions";
 import { SessionData } from "../types";
 import { clearSessionCookies, setSessionCookies } from "../lib/cookies";
 import htmlError from "../utils/html-page-error";
-
-// Orígenes permitidos (puedes ampliar)
-
-/**
- * Devuelve los segundos restantes hasta el `exp` de un JWT.
- * Retorna `null` si el token no parece ser un JWT o no contiene `exp`.
- */
-function getTokenRemainingSeconds(token?: string | null): number | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 3) return null; // no es JWT
-  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-  try {
-    const payloadJson = Buffer.from(padded, "base64").toString("utf8");
-    const payload = JSON.parse(payloadJson);
-    if (!payload.exp) return null;
-    const msLeft = payload.exp * 1000 - Date.now();
-    return Math.max(0, Math.floor(msLeft / 1000));
-  } catch {
-    return null;
-  }
-}
 
 function jsonError(
   message: string,
@@ -42,7 +19,126 @@ function jsonError(
   return res;
 }
 
+/**
+ * Helper para manejar errores en el callback: redirige a errorRedirectUrl si existe,
+ * o devuelve una página HTML de error.
+ */
+function handleCallbackError(message: string, status: number, extra?: any) {
+  const errorRedirectUrl = getErrorRedirectUrl();
+
+  if (errorRedirectUrl) {
+    const redirectUrl = new URL(errorRedirectUrl);
+    redirectUrl.searchParams.set("error", message);
+    redirectUrl.searchParams.set("status", String(status));
+    return NextResponse.redirect(redirectUrl, { status: 302 });
+  }
+
+  return htmlError(message, status);
+}
+
+/**
+ * Procesa el callback de autenticación SSO con tokens recibidos de forma segura
+ * en el cuerpo del POST (nunca en la URL).
+ */
+async function handleCallbackPost(request: Request) {
+  const origin = request.headers.get("origin");
+  const url = new URL(request.url);
+
+  console.log(
+    "[SSO-FLOW][4/5] 📥 zas-sso-client (handleCallbackPost): POST recibido en /api/sso/callback",
+    "\n  → URL:", url.toString(),
+    "\n  → origin:", origin,
+    "\n  → content-type:", request.headers.get("content-type"),
+    "\n  → Los tokens vienen en el BODY del POST (seguro), no en la URL",
+  );
+
+  const contentType = request.headers.get("content-type") || "";
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+
+  if (
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data")
+  ) {
+    console.log("[SSO-FLOW][4/5] 📋 zas-sso-client: Parseando tokens desde FormData (formulario HTML)");
+    const formData = await request.formData();
+    accessToken = formData.get("accessToken") as string;
+    refreshToken = formData.get("refreshToken") as string;
+  } else {
+    console.log("[SSO-FLOW][4/5] 📋 zas-sso-client: Parseando tokens desde JSON body");
+    const body = await request.json();
+    accessToken = body.accessToken;
+    refreshToken = body.refreshToken;
+  }
+
+  console.log(
+    "[SSO-FLOW][4/5] 🔍 zas-sso-client: Tokens extraídos del body",
+    "\n  → accessToken presente:", !!accessToken,
+    "\n  → refreshToken presente:", !!refreshToken,
+    "\n  → accessToken preview:", accessToken ? accessToken.substring(0, 20) + "..." : "(vacío)",
+  );
+
+  if (!accessToken) return handleCallbackError("Missing accessToken", 400);
+  if (!refreshToken) return handleCallbackError("Missing refreshToken", 400);
+
+  console.log("[SSO-FLOW][4/5] 🔄 zas-sso-client: Validando tokens con authenticateWithTokens (llama a /users/me)...");
+  const result = await authenticateWithTokens({ accessToken, refreshToken });
+
+  if (result.error || !result.data) {
+    console.error(
+      "[SSO-FLOW][4/5] ❌ zas-sso-client: authenticateWithTokens falló",
+      "\n  → status:", result.status,
+      "\n  → error:", result.error,
+    );
+    return handleCallbackError(
+      "Invalid credentials or user fetch failed",
+      result.status || 401,
+      { origin },
+    );
+  }
+
+  console.log(
+    "[SSO-FLOW][4/5] ✅ zas-sso-client: Tokens válidos, sesión persistida en cookie encriptada",
+    "\n  → Usuario:", result.data?.name || result.data?.id || "(sin nombre)",
+  );
+
+  const redirectUri = getRedirectUri();
+  const safeUrl = new URL(
+    parseRedirectUrl(redirectUri, getAppUrl() || url.origin),
+  );
+  safeUrl.searchParams.delete("accessToken");
+  safeUrl.searchParams.delete("refreshToken");
+  safeUrl.searchParams.delete("state");
+
+  const safeRedirect = safeUrl.toString();
+  console.log(
+    "[SSO-FLOW][5/5] 🎯 zas-sso-client: Redirigiendo al dashboard (sin tokens en URL)",
+    "\n  → redirectUri configurado:", redirectUri,
+    "\n  → URL final:", safeRedirect,
+    "\n  → La sesión ya está en la cookie httpOnly encriptada",
+    "\n  → ✅ FLUJO COMPLETO — El usuario está autenticado",
+  );
+  return NextResponse.redirect(safeRedirect, { status: 302 });
+}
+
 export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const isCallback = url.pathname.endsWith("/callback");
+
+  console.log(
+    "[SSO-FLOW] 📬 zas-sso-client POST handler",
+    "\n  → pathname:", url.pathname,
+    "\n  → isCallback:", isCallback,
+    isCallback
+      ? "→ Procesando callback SSO (tokens en body)"
+      : "→ Procesando set-session (cookies internas)",
+  );
+
+  if (isCallback) {
+    return handleCallbackPost(request);
+  }
+
+  // Ruta de session: establecer cookies de sesión (uso interno del SDK)
   const data = (await request.json()) as SessionData;
   try {
     await setSessionCookies(data);
@@ -63,54 +159,35 @@ export async function DELETE(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const origin = request.headers.get("origin");
   const url = new URL(request.url);
-  // Parámetros esperados
-  const accessToken = url.searchParams.get("accessToken");
-  const refreshToken = url.searchParams.get("refreshToken");
-  // calcular tiempo restante si el accessToken es JWT
-  const accessTokenRemaining = getTokenRemainingSeconds(accessToken);
-  // Unifica: usa "redirect" (o "redirectTo"). Aquí uso "redirect".
+  const hasTokens =
+    url.searchParams.has("accessToken") ||
+    url.searchParams.has("refreshToken");
 
-  // Helper local para aplicar la lógica de redirección de error o JSON
-  const handleError = (message: string, status: number, extra?: any) => {
-    const errorRedirectUrl = getErrorRedirectUrl();
+  console.log(
+    "[SSO-FLOW] 📭 zas-sso-client GET handler",
+    "\n  → pathname:", url.pathname,
+    "\n  → hasTokens en URL:", hasTokens,
+    hasTokens
+      ? "→ ⚠️ RECHAZADO: tokens en GET es inseguro"
+      : "→ GET normal (sin tokens)",
+  );
 
-    if (errorRedirectUrl) {
-      // Si hay URL de redirección de error, priorizarla
-      const redirectUrl = new URL(errorRedirectUrl);
-      // Pasar información mínima del error como query si se desea
-      redirectUrl.searchParams.set("error", message);
-      redirectUrl.searchParams.set("status", String(status));
-      return NextResponse.redirect(redirectUrl, { status: 302 });
-    }
-
-    // Fallback: respuesta JSON como antes
-    return htmlError(message, status);
-  };
-
-  if (!accessToken) return handleError("Missing accessToken", 400);
-  if (!refreshToken) return handleError("Missing refreshToken", 400);
-  const result = await authenticateWithTokens({ accessToken, refreshToken });
-
-  if (result.error || !result.data) {
-    return handleError(
-      "Invalid credentials or user fetch failed",
-      result.status || 401,
-      { origin },
+  if (hasTokens) {
+    // Los tokens no deben enviarse por GET (se exponen en la URL, historial y logs).
+    // Rechazar y redirigir al inicio de forma segura.
+    return htmlError(
+      "Insecure callback: tokens must not be sent via GET. Use POST instead.",
+      405,
     );
   }
-  const redirectUri = getRedirectUri();
-  // Redirección segura (sanitize)
-  const safeUrl = new URL(
-    parseRedirectUrl(redirectUri, getAppUrl() || url.origin),
-  );
-  safeUrl.searchParams.delete("accessToken");
-  safeUrl.searchParams.delete("refreshToken");
-  safeUrl.searchParams.delete("state");
 
-  const safeRedirect = safeUrl.toString();
-  const res = NextResponse.redirect(safeRedirect, { status: 302 });
-  return res;
+  // GET sin tokens: redirigir al appUrl
+  const appUrl = getAppUrl();
+  if (appUrl) {
+    return NextResponse.redirect(appUrl, { status: 302 });
+  }
+  return NextResponse.json({ ok: true, message: "SSO callback ready" });
 }
+
 export const handlers = { GET, POST, DELETE };
