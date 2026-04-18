@@ -182,6 +182,23 @@ export const getCookiesSession = cache(async (): Promise<SessionData> => {
 });
 
 /**
+ * Normaliza la respuesta cruda del endpoint /users/me al tipo User.
+ * Maneja diferencias entre APIs (firstName/lastName vs name, profilePicturePath vs photoUrl).
+ */
+function normalizeUserResponse(raw: any): User {
+  return {
+    ...raw,
+    name:
+      raw.name ||
+      `${raw.firstName || ""} ${raw.lastName || ""}`.trim() ||
+      "",
+    photoUrl: raw.photoUrl ?? raw.profilePicturePath ?? null,
+    emails: raw.emails ?? [],
+    phoneNumbers: raw.phoneNumbers ?? [],
+  };
+}
+
+/**
  * Obtiene el usuario. Se suele usar después de getCookiesSession.
  */
 export const fetchUser = async (
@@ -193,7 +210,11 @@ export const fetchUser = async (
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return handleApiServerError(response);
-    return buildApiResponseAsync<User>(response);
+    const result = await buildApiResponseAsync<any>(response);
+    if (result.data) {
+      result.data = normalizeUserResponse(result.data);
+    }
+    return result as ApiResponse<User>;
   } catch (error) {
     return { data: null as any, status: 500, error: true };
   }

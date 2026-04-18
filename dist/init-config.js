@@ -21,6 +21,20 @@ const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
 const debugEnv = parseBooleanEnv(process.env.SSO_DEBUG);
 // Ruta (path) relativa para redirección en caso de error de callback SSO
 const errorRedirectPathEnv = process.env.NEXT_PUBLIC_SSO_ERROR_REDIRECT_PATH?.trim();
+// Deriva el nombre de cookie del dominio de APP_URL: session_<dominio sin TLD>
+function buildCookieSessionName() {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (!appUrl)
+        return "session";
+    try {
+        const hostname = new URL(appUrl).hostname; // e.g. "admin.com"
+        const name = hostname.split(".")[0]; // e.g. "admin"
+        return name ? `session_${name}` : "session";
+    }
+    catch {
+        return "session";
+    }
+}
 const config = {
     NEXT_PUBLIC_APP_URL: normalizeUrl(process.env.NEXT_PUBLIC_APP_URL),
     NEXT_PUBLIC_SSO_URL: normalizeUrl(process.env.NEXT_PUBLIC_SSO_URL ?? "https://login.zasdistributor.com/login"),
@@ -28,7 +42,7 @@ const config = {
     REGISTER_REDIRECT_URI: normalizeUrl(process.env.NEXT_PUBLIC_REGISTER_CALLBACK_URL ?? "/"),
     ERROR_REDIRECT_PATH: errorRedirectPathEnv,
     MAX_COOKIES_AGE: 60 * 60 * 24 * 7,
-    COOKIE_SESSION_NAME: "session",
+    COOKIE_SESSION_NAME: buildCookieSessionName(),
     ENDPOINTS: {
         login: `${apiBase}/auth/login`,
         refresh: refreshEndpointEnv && refreshEndpointEnv.length > 0
