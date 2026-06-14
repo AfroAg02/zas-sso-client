@@ -65,5 +65,7 @@ export interface SSOInitOptions {
     login: string;
     refresh: string;
     me: string;
+    permissions?: string;
   }>;
+  encryptionSecret?: string;
 }

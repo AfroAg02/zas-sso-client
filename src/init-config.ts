@@ -22,6 +22,8 @@ const apiBase = normalizeUrl(
 );
 
 const refreshEndpointEnv = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT?.trim();
+const permissionsBaseEnv =
+  process.env.NEXT_PUBLIC_PERMISSIONS_ENDPOINT?.trim();
 const debugEnv = parseBooleanEnv(process.env.SSO_DEBUG);
 
 // Ruta (path) relativa para redirección en caso de error de callback SSO
@@ -60,9 +62,14 @@ const config = {
         ? refreshEndpointEnv
         : `${apiBase}/auth/refresh`,
     me: `${apiBase}/users/me`,
+    permissions:
+      permissionsBaseEnv && permissionsBaseEnv.length > 0
+        ? permissionsBaseEnv.replace(/\/+$/, "")
+        : "https://api.zasdistributor.com/api/me/permissions",
   },
   AUTOMATIC_REDIRECT_ON_REFRESH: true,
   DEBUG: debugEnv || false,
+  ENCRYPTION_SECRET: process.env.ENCRYPTION_SECRET,
 };
 
 // Getters (aseguran que siempre se lea el valor actualizado)
@@ -101,6 +108,9 @@ export function getEndpoints() {
 export function getDebug() {
   return config.DEBUG;
 }
+export function getEncryptionSecret() {
+  return config.ENCRYPTION_SECRET;
+}
 
 // Inicializador para sobrescribir valores
 export function initSSO(options: SSOInitOptions) {
@@ -128,6 +138,9 @@ export function initSSO(options: SSOInitOptions) {
   }
   if (typeof options.debug === "boolean") {
     config.DEBUG = options.debug;
+  }
+  if (options.encryptionSecret) {
+    config.ENCRYPTION_SECRET = options.encryptionSecret;
   }
 
   const middleware = createSSOMiddleware(options);
