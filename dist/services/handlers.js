@@ -33,18 +33,21 @@ async function handleCallbackPost(request) {
     const contentType = request.headers.get("content-type") || "";
     let accessToken = null;
     let refreshToken = null;
+    let registerRedirect = null;
     if (contentType.includes("application/x-www-form-urlencoded") ||
         contentType.includes("multipart/form-data")) {
         console.log("[SSO-FLOW][4/5] 📋 zas-sso-client: Parseando tokens desde FormData (formulario HTML)");
         const formData = await request.formData();
         accessToken = formData.get("accessToken");
         refreshToken = formData.get("refreshToken");
+        registerRedirect = formData.get("registerRedirect");
     }
     else {
         console.log("[SSO-FLOW][4/5] 📋 zas-sso-client: Parseando tokens desde JSON body");
         const body = await request.json();
         accessToken = body.accessToken;
         refreshToken = body.refreshToken;
+        registerRedirect = body.registerRedirect || null;
     }
     console.log("[SSO-FLOW][4/5] 🔍 zas-sso-client: Tokens extraídos del body", "\n  → accessToken presente:", !!accessToken, "\n  → refreshToken presente:", !!refreshToken, "\n  → accessToken preview:", accessToken ? accessToken.substring(0, 20) + "..." : "(vacío)");
     if (!accessToken)
@@ -58,13 +61,27 @@ async function handleCallbackPost(request) {
         return handleCallbackError("Invalid credentials or user fetch failed", result.status || 401, { origin });
     }
     console.log("[SSO-FLOW][4/5] ✅ zas-sso-client: Tokens válidos, sesión persistida en cookie encriptada", "\n  → Usuario:", result.data?.name || result.data?.id || "(sin nombre)");
-    const redirectUri = getRedirectUri();
-    const safeUrl = new URL(parseRedirectUrl(redirectUri, getAppUrl() || url.origin));
-    safeUrl.searchParams.delete("accessToken");
-    safeUrl.searchParams.delete("refreshToken");
-    safeUrl.searchParams.delete("state");
-    const safeRedirect = safeUrl.toString();
-    console.log("[SSO-FLOW][5/5] 🎯 zas-sso-client: Redirigiendo al dashboard (sin tokens en URL)", "\n  → redirectUri configurado:", redirectUri, "\n  → URL final:", safeRedirect, "\n  → La sesión ya está en la cookie httpOnly encriptada", "\n  → ✅ FLUJO COMPLETO — El usuario está autenticado");
+    // Si viene registerRedirect, usarlo como destino (flujo de registro);
+    // de lo contrario, usar el redirectUri configurado (flujo de login).
+    const appOrigin = getAppUrl() || url.origin;
+    let safeRedirect;
+    if (registerRedirect && registerRedirect.trim()) {
+        const safeUrl = new URL(parseRedirectUrl(registerRedirect, appOrigin));
+        safeUrl.searchParams.delete("accessToken");
+        safeUrl.searchParams.delete("refreshToken");
+        safeUrl.searchParams.delete("state");
+        safeRedirect = safeUrl.toString();
+        console.log("[SSO-FLOW][5/5] 🎯 zas-sso-client: Redirigiendo al register callback (sin tokens en URL)", "\n  → registerRedirect:", registerRedirect, "\n  → URL final:", safeRedirect, "\n  → La sesión ya está en la cookie httpOnly encriptada", "\n  → ✅ FLUJO REGISTRO COMPLETO — El usuario está autenticado");
+    }
+    else {
+        const redirectUri = getRedirectUri();
+        const safeUrl = new URL(parseRedirectUrl(redirectUri, appOrigin));
+        safeUrl.searchParams.delete("accessToken");
+        safeUrl.searchParams.delete("refreshToken");
+        safeUrl.searchParams.delete("state");
+        safeRedirect = safeUrl.toString();
+        console.log("[SSO-FLOW][5/5] 🎯 zas-sso-client: Redirigiendo al dashboard (sin tokens en URL)", "\n  → redirectUri configurado:", redirectUri, "\n  → URL final:", safeRedirect, "\n  → La sesión ya está en la cookie httpOnly encriptada", "\n  → ✅ FLUJO COMPLETO — El usuario está autenticado");
+    }
     return NextResponse.redirect(safeRedirect, { status: 302 });
 }
 export async function POST(request) {

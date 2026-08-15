@@ -5,32 +5,231 @@ const ITERATIONS = 100_000;
 const ENC = "A256GCM"; // 256-bit AES-GCM
 const ALG = "dir"; // direct symmetric key
 
+// --- Caché de claves derivadas -------------------------------------------------
+//
+// PBKDF2 a 100k iteraciones cuesta ~29 ms y corre en el threadpool de libuv (4 hilos
+// por defecto), compartido con fs y con dns.lookup de cada fetch saliente. Como el
+// salt viaja dentro del valor cifrado, la cookie de un usuario mantiene el MISMO salt
+// hasta que se vuelve a emitir (login o refresh de token), así que la clave derivada
+// se puede reutilizar sin tocar el formato en cable.
+//
+// Reglas del caché:
+//  - Se indexa por `${huellaDelSecreto}:${saltHex}` para que una rotación de secreto
+//    no devuelva jamás una clave obsoleta.
+//  - Una clave sólo entra al caché DESPUÉS de descifrar correctamente un JWE, de modo
+//    que nadie pueda llenarlo enviando cookies con salts aleatorios.
+//  - Vive en globalThis para sobrevivir a reinstanciaciones del módulo dentro del
+//    mismo isolate (Node y Edge tienen bundles distintos: cada uno tiene su caché).
+const MAX_KEYS = 512; // ~unos cientos de bytes por handle
+const KEY_TTL_MS = 30 * 60 * 1000; // deslizante: se renueva en cada acierto
+const MAX_CONCURRENT_DERIVATIONS = 2; // deja hilos libres del threadpool para fs/dns
+const MAX_DERIVATION_QUEUE = 32;
+const MAX_FINGERPRINTS = 4;
+
+const SALT_HEX_RE = /^[0-9a-f]{32}$/i;
+const CACHE_SLOT = Symbol.for("zas-sso-client.keycache.v1");
+
+// No se nombra `CryptoKey` a propósito: @types/node y lib.dom declaran cada uno el
+// suyo y no siempre unifican.
+type DerivedKey = Awaited<ReturnType<SubtleCrypto["deriveKey"]>>;
+type BaseKey = Awaited<ReturnType<SubtleCrypto["importKey"]>>;
+
+interface CacheSlot {
+  v: 1;
+  keys: Map<string, { key: DerivedKey; exp: number }>;
+  inflight: Map<string, Promise<DerivedKey>>;
+  base: Map<string, Promise<BaseKey>>;
+  fingerprints: Map<string, Promise<string>>;
+  salt: Uint8Array | null;
+  active: number;
+  queue: Array<() => void>;
+}
+
+function freshSlot(): CacheSlot {
+  return {
+    v: 1,
+    keys: new Map(),
+    inflight: new Map(),
+    base: new Map(),
+    fingerprints: new Map(),
+    salt: null,
+    active: 0,
+    queue: [],
+  };
+}
+
+function getSlot(): CacheSlot {
+  const g = globalThis as any;
+  const current = g[CACHE_SLOT];
+  // Pueden convivir dos versiones del paquete en un mismo isolate: si la forma no es
+  // la esperada, se descarta en lugar de romper.
+  if (!current || current.v !== 1 || !(current.keys instanceof Map)) {
+    const slot = freshSlot();
+    g[CACHE_SLOT] = slot;
+    return slot;
+  }
+  return current as CacheSlot;
+}
+
+let secretWarned = false;
+
 function getSecret(): string {
   const secret = process.env.ENCRYPTION_SECRET;
   if (!secret) throw new Error("ENCRYPTION_SECRET env var is required");
+  if (!secretWarned && secret.length < 32) {
+    secretWarned = true;
+    console.warn(
+      `[zas-sso-client] ENCRYPTION_SECRET tiene ${secret.length} caracteres; se recomiendan 32 o más.`
+    );
+  }
   return secret;
 }
 
 const te = new TextEncoder();
 const td = new TextDecoder();
 
-async function deriveKeyRaw(secret: string, salt: any): Promise<Uint8Array> {
-  // Derivamos 256 bits usando PBKDF2 SHA-256
-  const baseKey = await crypto.subtle.importKey(
+// Copia a ArrayBuffer: satisface BufferSource sin pelear con los genéricos de
+// Uint8Array<ArrayBufferLike> de TS 5.9.
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
+// Semáforo: limita las derivaciones concurrentes para que una ráfaga de cookies
+// inválidas no monopolice el threadpool (y con él dns.lookup de cada fetch).
+async function acquireDerivationSlot(slot: CacheSlot): Promise<void> {
+  if (slot.active < MAX_CONCURRENT_DERIVATIONS) {
+    slot.active += 1;
+    return;
+  }
+  if (slot.queue.length >= MAX_DERIVATION_QUEUE) {
+    throw new Error("Key derivation queue is full");
+  }
+  // Quien espera hereda el turno de quien lo libera (no vuelve a incrementar).
+  await new Promise<void>((resolve) => slot.queue.push(resolve));
+}
+
+function releaseDerivationSlot(slot: CacheSlot): void {
+  const next = slot.queue.shift();
+  if (next) next();
+  else slot.active -= 1;
+}
+
+// Huella del secreto: SHA-256 real, nunca un hash barato — una colisión devolvería
+// la clave equivocada y eso se traduce en cierre de sesión masivo.
+function getSecretFingerprint(secret: string): Promise<string> {
+  const slot = getSlot();
+  const cached = slot.fingerprints.get(secret);
+  if (cached) return cached;
+
+  const pending = crypto.subtle
+    .digest("SHA-256", toArrayBuffer(te.encode(secret)))
+    .then((digest) => toHex(new Uint8Array(digest)).slice(0, 16));
+
+  pending.catch(() => slot.fingerprints.delete(secret));
+  if (slot.fingerprints.size >= MAX_FINGERPRINTS) {
+    const oldest = slot.fingerprints.keys().next().value;
+    if (oldest !== undefined) slot.fingerprints.delete(oldest);
+  }
+  slot.fingerprints.set(secret, pending);
+  return pending;
+}
+
+function getBaseKey(secret: string, fingerprint: string): Promise<BaseKey> {
+  const slot = getSlot();
+  const cached = slot.base.get(fingerprint);
+  if (cached) return cached;
+
+  const pending = crypto.subtle.importKey(
     "raw",
-    te.encode(secret),
+    toArrayBuffer(te.encode(secret)),
     { name: "PBKDF2" },
     false,
-    ["deriveBits"]
+    ["deriveKey"]
   );
-  // Create an ArrayBuffer containing exactly the salt bytes to satisfy BufferSource typing
 
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
-    baseKey,
-    256
-  );
-  return new Uint8Array(bits);
+  pending.catch(() => slot.base.delete(fingerprint));
+  slot.base.set(fingerprint, pending);
+  return pending;
+}
+
+function lookupKey(cacheKey: string): DerivedKey | null {
+  const slot = getSlot();
+  const entry = slot.keys.get(cacheKey);
+  if (!entry) return null;
+  if (entry.exp <= Date.now()) {
+    slot.keys.delete(cacheKey);
+    return null;
+  }
+  // TTL deslizante: una clave en uso no se re-deriva cada 30 minutos.
+  entry.exp = Date.now() + KEY_TTL_MS;
+  // Reinserta para que el orden del Map siga siendo el de uso (LRU).
+  slot.keys.delete(cacheKey);
+  slot.keys.set(cacheKey, entry);
+  return entry.key;
+}
+
+function commitKey(cacheKey: string, key: DerivedKey): void {
+  const slot = getSlot();
+  slot.keys.set(cacheKey, { key, exp: Date.now() + KEY_TTL_MS });
+  while (slot.keys.size > MAX_KEYS) {
+    const oldest = slot.keys.keys().next().value;
+    if (oldest === undefined) break;
+    slot.keys.delete(oldest);
+  }
+}
+
+/**
+ * Deriva la clave AES-GCM (no extraíble) para un salt dado.
+ * No la guarda en caché: eso lo decide quien llama, y sólo tras verificar el JWE.
+ */
+async function deriveKeyForSalt(
+  secret: string,
+  salt: Uint8Array
+): Promise<DerivedKey> {
+  const fingerprint = await getSecretFingerprint(secret);
+  const baseKey = await getBaseKey(secret, fingerprint);
+  const slot = getSlot();
+
+  await acquireDerivationSlot(slot);
+  try {
+    // Las dos usages son obligatorias: la misma entrada de caché se reutiliza para
+    // cifrar, y jose v6 rechaza una clave sin "encrypt".
+    return await crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: toArrayBuffer(salt),
+        iterations: ITERATIONS,
+        hash: "SHA-256",
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  } finally {
+    releaseDerivationSlot(slot);
+  }
+}
+
+/** Una sola derivación aunque lleguen N lecturas concurrentes del mismo salt. */
+function deriveOnce(
+  cacheKey: string,
+  secret: string,
+  salt: Uint8Array
+): Promise<DerivedKey> {
+  const slot = getSlot();
+  const inflight = slot.inflight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const pending = deriveKeyForSalt(secret, salt).finally(() => {
+    slot.inflight.delete(cacheKey);
+  });
+  // La copia almacenada no debe provocar unhandledRejection si nadie más la espera.
+  pending.catch(() => undefined);
+  slot.inflight.set(cacheKey, pending);
+  return pending;
 }
 
 function toHex(buf: Uint8Array): string {
@@ -47,17 +246,43 @@ function fromHex(hex: string): Uint8Array {
   return arr;
 }
 
+/**
+ * Salt de escritura: uno aleatorio por isolate, no uno por cookie.
+ *
+ * Sigue siendo aleatorio (no se deriva del secreto, que convertiría la cookie en un
+ * verificador offline barato del ENCRYPTION_SECRET), pero al compartirse entre las
+ * cookies que emite un mismo proceso, el número de salts vivos pasa a ser del orden
+ * de generaciones de proceso en lugar de usuarios. El formato no cambia: el salt
+ * sigue viajando dentro del valor, así que versiones anteriores lo siguen leyendo.
+ */
+function getEncryptionSalt(): Uint8Array {
+  const slot = getSlot();
+  if (!slot.salt) {
+    slot.salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  }
+  return slot.salt;
+}
+
 export const encrypt = async (text: string): Promise<string> => {
-  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
-  const keyBytes = await deriveKeyRaw(getSecret(), salt);
+  const secret = getSecret();
+  const salt = getEncryptionSalt();
+  const saltHex = toHex(salt);
+  const cacheKey = `${await getSecretFingerprint(secret)}:${saltHex}`;
+
+  let key = lookupKey(cacheKey);
+  if (!key) {
+    // Salt propio: es de confianza, se guarda sin esperar a verificar nada.
+    key = await deriveOnce(cacheKey, secret, salt);
+    commitKey(cacheKey, key);
+  }
 
   // Usamos jose CompactEncrypt con key simétrica derivada.
   const jwe = await new CompactEncrypt(te.encode(text))
     .setProtectedHeader({ alg: ALG, enc: ENC })
-    .encrypt(keyBytes);
+    .encrypt(key as any);
 
   // Formato: saltHex:JWE  (rompe compatibilidad con formato previo, pero decrypt soporta fallback)
-  return `${toHex(salt)}:${jwe}`;
+  return `${saltHex}:${jwe}`;
 };
 
 export const decrypt = async (encryptedText: string): Promise<string> => {
@@ -81,10 +306,26 @@ export const decrypt = async (encryptedText: string): Promise<string> => {
     return legacyDecrypt(encryptedText);
   }
 
+  // Comprobación de forma antes de derivar: fromHex acepta basura silenciosamente
+  // (parseInt -> NaN -> 0), y derivar cuesta ~29 ms de threadpool.
+  if (!SALT_HEX_RE.test(saltHex)) {
+    console.error("Decryption failed (jwe path): invalid salt format");
+    throw new Error("Decryption failed");
+  }
+
   try {
-    const salt = fromHex(saltHex);
-    const keyBytes = await deriveKeyRaw(getSecret(), salt);
-    const { plaintext } = await compactDecrypt(jwe, keyBytes);
+    const secret = getSecret();
+    const cacheKey = `${await getSecretFingerprint(secret)}:${saltHex.toLowerCase()}`;
+
+    const cached = lookupKey(cacheKey);
+    const key = cached ?? (await deriveOnce(cacheKey, secret, fromHex(saltHex)));
+
+    const { plaintext } = await compactDecrypt(jwe, key as any);
+
+    // Sólo se guarda tras un descifrado válido: un atacante que envíe salts al azar
+    // no puede llenar el caché ni desalojar entradas legítimas.
+    if (!cached) commitKey(cacheKey, key);
+
     return td.decode(plaintext);
   } catch (e) {
     console.error("Decryption failed (jwe path):", e);
@@ -96,9 +337,13 @@ export const decrypt = async (encryptedText: string): Promise<string> => {
 async function legacyDecrypt(encryptedText: string): Promise<string> {
   const parts = encryptedText.split(":");
   if (parts.length !== 4) {
+    // Se registra la forma, no el valor: es una cadena controlada por quien envía la
+    // petición y acaba en el agregador de logs (inyección de saltos de línea/ANSI).
     console.error(
-      "Invalid encrypted format (legacy). Received:",
-      encryptedText
+      "Invalid encrypted format (legacy). Received length:",
+      encryptedText.length,
+      "segments:",
+      parts.length
     );
     throw new Error("Invalid encrypted format");
   }
