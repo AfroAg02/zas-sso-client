@@ -52,6 +52,8 @@ export const config = config; // si Next exige exactamente 'config'
 
 > Nota: Si tu bundler requiere que el objeto se llame exactamente `config`, exponlo así. Aquí ambos ejemplos.
 
+> **`/users/me-fast` (opcional, desde 1.2.60).** Si tu `me` apunta a la API core (zasexpressapi), puedes usar la variante ligera `.../api/users/me-fast`, mucho más rápida en el callback y en cada refresh. El SDK la normaliza a la misma forma de `User`, pero `emails` y `phoneNumbers` traen **solo el contacto principal**. Si el entorno aún no la tiene desplegada (404/405/5xx), el SDK reintenta contra `/users/me`. **No** la configures en sistemas cuyo `me` va a su propia API (firma, notificaciones, imágenes, track, onlizas): allí no existe.
+
 ---
 
 ## 3. Provider en layout

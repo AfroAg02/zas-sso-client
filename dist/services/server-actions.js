@@ -154,26 +154,68 @@ export const getCookiesSession = cache(async () => {
 });
 /**
  * Normaliza la respuesta cruda del endpoint /users/me al tipo User.
- * Maneja diferencias entre APIs (firstName/lastName vs name, profilePicturePath vs photoUrl).
+ * Maneja diferencias entre APIs (firstName/lastName vs name, profilePicturePath vs photoUrl)
+ * y la variante ligera /users/me-fast, que trae un único email y teléfono principales
+ * (`email` / `phoneNumber`) en lugar de las listas `emails` / `phoneNumbers`.
  */
 function normalizeUserResponse(raw) {
     return {
         ...raw,
         name: raw.name || `${raw.firstName || ""} ${raw.lastName || ""}`.trim() || "",
         photoUrl: raw.photoUrl ?? raw.profilePicturePath ?? null,
-        emails: raw.emails ?? [],
-        phoneNumbers: raw.phoneNumbers ?? [],
+        emails: raw.emails ?? fastEmailToList(raw),
+        phoneNumbers: raw.phoneNumbers ?? fastPhoneToList(raw),
     };
 }
+function fastEmailToList(raw) {
+    if (typeof raw.email !== "string" || !raw.email)
+        return [];
+    return [
+        { address: raw.email, isVerified: !!raw.emailIsVerified, active: true },
+    ];
+}
+function fastPhoneToList(raw) {
+    if (typeof raw.phoneNumber !== "string" || !raw.phoneNumber)
+        return [];
+    const hasCountryCode = raw.phoneCountryCode != null;
+    return [
+        {
+            // Con código de país se separa como en /users/me; sin él (país aún no
+            // sincronizado) phoneNumber ya es el número tal cual.
+            number: hasCountryCode
+                ? (raw.phoneNumberLocal ?? raw.phoneNumber)
+                : raw.phoneNumber,
+            country: {
+                phoneNumberCode: hasCountryCode ? String(raw.phoneCountryCode) : "",
+            },
+            countryId: 0,
+            isVerified: !!raw.phoneIsVerified,
+            active: true,
+        },
+    ];
+}
+const FAST_ME_SUFFIX = /\/users\/me-fast\/?$/i;
+/**
+ * /users/me-fast solo existe en la API core: si el endpoint configurado es esa variante y
+ * responde 404/405 o un fallo del servidor (aún no desplegada en el entorno), se reintenta
+ * contra /users/me. 401 y 403 (usuario bloqueado) se respetan tal cual.
+ */
+const shouldFallbackToFullMe = (url, status) => FAST_ME_SUFFIX.test(url) && (status === 404 || status === 405 || status >= 500);
 /**
  * Obtiene el usuario. Se suele usar después de getCookiesSession.
  */
 export const fetchUser = async (accessToken) => {
     const { me } = getEndpoints();
     try {
-        const response = await fetch(me, {
+        let response = await fetch(me, {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
+        if (!response.ok && shouldFallbackToFullMe(me, response.status)) {
+            console.warn(`[zas-sso-client] ${me} respondió ${response.status}; usando /users/me`);
+            response = await fetch(me.replace(FAST_ME_SUFFIX, "/users/me"), {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+        }
         if (!response.ok)
             return handleApiServerError(response);
         const result = await buildApiResponseAsync(response);
